@@ -1,0 +1,12 @@
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+ortools==9.14.6206
+pydantic==2.11.7
+pydantic-settings==2.10.1
+httpx==0.28.1
+python-dotenv==1.1.1
+tzdata>=2025.2
+# 송영 일지 / 기사 기기 토큰 저장소. postgrest는 supabase가 함께 끌고 오지만
+# APIError를 직접 import 하므로 명시해 둔다.
+supabase==2.31.0
+postgrest==2.31.0

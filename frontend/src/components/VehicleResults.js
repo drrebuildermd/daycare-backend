@@ -1,0 +1,196 @@
+import React from 'react';
+import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+
+import RouteMap from './RouteMap';
+
+async function launchNavigation(stop) {
+  try {
+    await Linking.openURL(stop.kakao_navi_url);
+  } catch (_) {
+    Alert.alert('카카오내비 실행 실패', '카카오내비가 설치되어 있는지 확인해 주세요.');
+  }
+}
+
+function formatCompletionTime(value) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString('ko-KR', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  });
+}
+
+const tripLabel = (vehicle, trip) => {
+  const base = `${vehicle.vehicle_type} (${trip.round}회차)`;
+  return vehicle.driver_name ? `${base} - ${vehicle.driver_name} 선생님` : base;
+};
+
+const Trip = ({ trip, vehicle, completedStops, savingStops, onComplete }) => (
+  <View style={[styles.trip, !trip.used && styles.unusedTrip]}>
+    <Text style={[styles.tripLabel, !trip.used && styles.mutedText]}>{tripLabel(vehicle, trip)}</Text>
+    <View style={styles.tripHeading}>
+      <View style={[styles.roundBadge, !trip.used && styles.mutedBadge]}>
+        <Text style={[styles.roundText, !trip.used && styles.mutedText]}>{trip.round}차</Text>
+      </View>
+      {trip.used ? (
+        <>
+          <Text style={styles.tripMeta}>{trip.passenger_count}/{trip.capacity}명</Text>
+          <Text style={styles.tripMeta}>{trip.departure_time} 출발 · {trip.return_time} 복귀</Text>
+        </>
+      ) : <Text style={styles.emptyText}>운행 없음</Text>}
+    </View>
+
+    {trip.stops.map((stop) => {
+      const completionKey = stop.passenger_id;
+      const completedAt = completedStops[completionKey];
+      const isSaving = Boolean(savingStops[completionKey]);
+      return (
+      <View key={stop.passenger_id} style={[styles.stopCard, completedAt && styles.completedCard]}>
+        <View style={[styles.sequence, completedAt && styles.completedSequence]}><Text style={styles.sequenceText}>{stop.sequence}</Text></View>
+        <View style={styles.stopBody}>
+          <View style={styles.nameRow}>
+            <Text style={[styles.stopName, completedAt && styles.completedText]}>{stop.name}</Text>
+            {stop.wheelchair && <Text style={styles.wheelchair}>♿ 휠체어</Text>}
+            <Text style={[styles.eta, completedAt && styles.completedText]}>{stop.estimated_pickup}</Text>
+          </View>
+          <Text style={[styles.address, completedAt && styles.completedText]}>{stop.address}</Text>
+          {!!stop.detail_address && (
+            <Text style={[styles.detailAddress, completedAt && styles.completedText]}>🏠 {stop.detail_address}</Text>
+          )}
+          <Text style={styles.window}>요청 {stop.requested_window}</Text>
+          {completedAt && <Text style={styles.completedAt}>✅ 탑승 완료 · {formatCompletionTime(completedAt)}</Text>}
+        </View>
+        <View style={styles.actionColumn}>
+          <Pressable
+            style={[styles.singleNaviButton, completedAt && styles.disabledAction]}
+            onPress={() => launchNavigation(stop)}
+            disabled={Boolean(completedAt)}
+          >
+            <Text style={styles.singleNaviText}>🚀 내비</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.completeButton, (completedAt || isSaving) && styles.completedButton]}
+            onPress={() => onComplete({ stop, tripRound: trip.round, vehicle })}
+            disabled={Boolean(completedAt) || isSaving}
+          >
+            <Text style={[styles.completeButtonText, completedAt && styles.completedButtonText]}>
+              {completedAt ? '완료됨' : isSaving ? '저장 중…' : '✅ 탑승 완료'}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    );})}
+
+    {trip.used && (
+      <>
+        <View style={styles.tripFooter}>
+          <Text style={styles.distance}>왕복 예상 {(trip.distance_km || 0).toFixed(1)} km</Text>
+        </View>
+      </>
+    )}
+  </View>
+);
+
+export default function VehicleResults({ result, completedStops, savingStops, onComplete }) {
+  return (
+    <View>
+      <View style={styles.summary}>
+        <Text style={styles.summaryEyebrow}>배차 완료</Text>
+        <Text style={styles.summaryTitle}>{result.total_passengers || 0}명 · 총 {(result.total_distance_km || 0).toFixed(1)} km</Text>
+        <Text style={styles.summaryCaption}>연산 {(result.solve_seconds || 0).toFixed(2)}초</Text>
+      </View>
+
+      <View style={styles.splitRow}>
+        <View style={styles.mapPane}>
+          <RouteMap center={result.center} vehicles={result.vehicles || []} />
+        </View>
+
+        <View style={styles.listPane}>
+      {(result.vehicles || []).map((vehicle) => (
+        <View key={vehicle.vehicle_id} style={styles.vehicleCard}>
+          <View style={styles.vehicleHeader}>
+            <View>
+              <Text style={styles.vehicleName}>{vehicle.vehicle_type}</Text>
+              <Text style={styles.vehicleCapacity}>
+                {vehicle.plate_number} · 정원 {vehicle.capacity}명 · 최대 2회
+                {vehicle.driver_name ? ` · ${vehicle.driver_name} 선생님` : ''}
+              </Text>
+            </View>
+            <View style={styles.vehicleIcon}><Text style={styles.vehicleIconText}>🚐</Text></View>
+          </View>
+          {vehicle.trips.map((trip) => (
+            <Trip
+              key={trip.round}
+              trip={trip}
+              vehicle={vehicle}
+              completedStops={completedStops}
+              savingStops={savingStops}
+              onComplete={onComplete}
+            />
+          ))}
+        </View>
+      ))}
+        </View>
+      </View>
+
+      <View style={styles.noticeBox}>
+        {(result.notices || []).map((notice) => <Text key={notice} style={styles.notice}>• {notice}</Text>)}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  summary: { backgroundColor: '#0F766E', borderRadius: 20, padding: 20, marginBottom: 16 },
+  // flexWrap이 분할/적층을 자동으로 결정한다. 폭이 flexBasis 합보다 좁으면 줄바꿈된다.
+  splitRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: 16 },
+  // 지도는 스크롤에 따라붙어 리스트를 훑는 동안에도 계속 보이게 한다.
+  mapPane: { flexGrow: 1.15, flexShrink: 1, flexBasis: 520, minWidth: 300, position: 'sticky', top: 16 },
+  listPane: { flexGrow: 1, flexShrink: 1, flexBasis: 440, minWidth: 300 },
+  summaryEyebrow: { color: '#99F6E4', fontWeight: '800', fontSize: 12, marginBottom: 5 },
+  summaryTitle: { color: '#FFFFFF', fontWeight: '900', fontSize: 22 },
+  summaryCaption: { color: '#CCFBF1', marginTop: 6 },
+  vehicleCard: { backgroundColor: '#FFFFFF', borderRadius: 20, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 16, overflow: 'hidden' },
+  vehicleHeader: { padding: 17, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F8FAFC' },
+  vehicleName: { color: '#0F172A', fontSize: 19, fontWeight: '900' },
+  vehicleCapacity: { color: '#64748B', marginTop: 3, fontSize: 12 },
+  vehicleIcon: { width: 42, height: 42, borderRadius: 13, backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center' },
+  vehicleIconText: { fontSize: 21 },
+  trip: { borderTopWidth: 1, borderColor: '#E2E8F0', padding: 15 },
+  tripLabel: { color: '#0F766E', fontSize: 14, fontWeight: '900', marginBottom: 10 },
+  unusedTrip: { paddingVertical: 12, backgroundColor: '#FAFAFA' },
+  tripHeading: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 13 },
+  roundBadge: { backgroundColor: '#CCFBF1', paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8 },
+  mutedBadge: { backgroundColor: '#E2E8F0' },
+  roundText: { color: '#0F766E', fontWeight: '900', fontSize: 12 },
+  mutedText: { color: '#64748B' },
+  tripMeta: { color: '#475569', fontSize: 12, fontWeight: '600' },
+  emptyText: { color: '#94A3B8', fontSize: 13 },
+  stopCard: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 14, padding: 11, marginBottom: 10, backgroundColor: '#FFFFFF' },
+  completedCard: { backgroundColor: '#E5E7EB', borderColor: '#CBD5E1', opacity: 0.78 },
+  sequence: { width: 25, height: 25, borderRadius: 13, backgroundColor: '#0EA5E9', alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  completedSequence: { backgroundColor: '#64748B' },
+  sequenceText: { color: '#FFFFFF', fontSize: 12, fontWeight: '900' },
+  stopBody: { flex: 1, paddingHorizontal: 9 },
+  nameRow: { flexDirection: 'row', alignItems: 'center' },
+  stopName: { color: '#0F172A', fontWeight: '800', fontSize: 15 },
+  wheelchair: { color: '#7C3AED', fontSize: 10, fontWeight: '800', marginLeft: 6, backgroundColor: '#EDE9FE', paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5 },
+  eta: { marginLeft: 'auto', color: '#0284C7', fontWeight: '900', fontSize: 16 },
+  address: { color: '#64748B', fontSize: 12, marginTop: 4 },
+  detailAddress: { color: '#0F766E', fontSize: 13, fontWeight: '700', marginTop: 2 },
+  window: { color: '#94A3B8', fontSize: 11, marginTop: 3 },
+  completedText: { color: '#64748B', textDecorationLine: 'line-through' },
+  completedAt: { color: '#166534', fontSize: 11, fontWeight: '800', marginTop: 5 },
+  actionColumn: { width: 89, gap: 7 },
+  singleNaviButton: { backgroundColor: '#FEE500', borderRadius: 9, paddingVertical: 9, alignItems: 'center' },
+  singleNaviText: { color: '#191919', fontSize: 12, fontWeight: '900' },
+  completeButton: { backgroundColor: '#0F766E', borderRadius: 9, paddingVertical: 9, alignItems: 'center' },
+  completeButtonText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900' },
+  completedButton: { backgroundColor: '#CBD5E1' },
+  completedButtonText: { color: '#475569' },
+  disabledAction: { opacity: 0.4 },
+  tripFooter: { alignItems: 'flex-end', marginBottom: 9 },
+  distance: { color: '#64748B', fontSize: 12, fontWeight: '700' },
+  noticeBox: { backgroundColor: '#FFF7ED', borderRadius: 14, padding: 14, marginBottom: 24 },
+  notice: { color: '#9A3412', fontSize: 12, lineHeight: 18, marginBottom: 4 },
+});

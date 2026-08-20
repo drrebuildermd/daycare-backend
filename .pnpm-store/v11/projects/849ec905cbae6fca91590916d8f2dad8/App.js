@@ -1,0 +1,463 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Linking,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+
+import {
+  API_URL,
+  fetchTodayCompletions,
+  getTodayCompletionExportUrl,
+  optimizeRoutes,
+  saveRideCompletion,
+} from './src/api';
+import PassengerForm from './src/components/PassengerForm';
+import VehicleForm from './src/components/VehicleForm';
+import VehicleResults from './src/components/VehicleResults';
+import { pickPassengerExcel } from './src/excel';
+import AddressSearch from './src/components/AddressSearch';
+import PairRuleEditor from './src/components/PairRuleEditor';
+
+const emptyPassenger = () => ({
+  localId: `${Date.now()}-${Math.random()}`,
+  id: `passenger-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+  name: '',
+  address: '',
+  detailAddress: '',
+  attending: true,
+  pickupStart: '08:00',
+  pickupEnd: '08:30',
+  wheelchair: false,
+  latitude: '',
+  longitude: '',
+});
+
+const emptyVehicle = () => ({
+  localId: `${Date.now()}-${Math.random()}`,
+  id: `vehicle-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+  vehicleType: '',
+  plateNumber: '',
+  driverName: '',
+  capacity: '4',
+});
+
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+const STORAGE_KEY = 'daycare-routing:last-session:v1';
+
+export default function App() {
+  const [screen, setScreen] = useState('vehicles');
+  const [vehicles, setVehicles] = useState([emptyVehicle()]);
+  const [center, setCenter] = useState({
+    name: '주야간보호센터', address: '', latitude: '', longitude: '',
+  });
+  const [passengers, setPassengers] = useState([emptyPassenger()]);
+  const [excelName, setExcelName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [completedStops, setCompletedStops] = useState({});
+  const [savingStops, setSavingStops] = useState({});
+  const [isCenterAddressModalOpen, setIsCenterAddressModalOpen] = useState(false);
+  const [pairRules, setPairRules] = useState([]);
+  // 복원이 끝나기 전에 저장이 돌면 빈 초기값이 기존 명단을 덮어쓴다.
+  const [restored, setRestored] = useState(false);
+
+  useEffect(() => {
+    const restoreSession = async () => {
+      try {
+        const saved = await AsyncStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const session = JSON.parse(saved);
+          if (session.vehicles) setVehicles(session.vehicles);
+          if (session.center) setCenter(session.center);
+          if (session.passengers) setPassengers(session.passengers);
+          if (session.pairRules) setPairRules(session.pairRules);
+          if (session.result) {
+            setResult(session.result);
+            setScreen('results');
+          }
+        }
+      } catch (_) {
+        // A corrupt local cache must not block fresh dispatch work.
+      }
+      try {
+        const today = await fetchTodayCompletions();
+        setCompletedStops(Object.fromEntries(
+          today.records.map((record) => [record.passenger_id, record.completed_at]),
+        ));
+      } catch (_) {
+        // The API error is surfaced when the driver attempts a write/export.
+      }
+      setRestored(true);
+    };
+    restoreSession();
+  }, []);
+
+  // 명단·차량·규칙은 바뀔 때마다 저장한다.
+  // 예전에는 배차를 눌러야만 저장돼서, 입력만 하고 앱을 닫으면 전부 날아갔다.
+  useEffect(() => {
+    if (!restored) return;
+    AsyncStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ vehicles, center, passengers, pairRules, result }),
+    ).catch(() => {
+      // 저장 실패는 조용히 넘긴다. 다음 변경 때 다시 시도된다.
+    });
+  }, [restored, vehicles, center, passengers, pairRules, result]);
+
+  const passengerCount = useMemo(
+    () => passengers.filter(
+      (passenger) => (passenger.name || passenger.address) && passenger.attending !== false,
+    ).length,
+    [passengers],
+  );
+  const maxPassengerCapacity = useMemo(
+    () => vehicles.reduce((sum, vehicle) => sum + (Number(vehicle.capacity) || 0), 0) * 2,
+    [vehicles],
+  );
+
+  const updatePassenger = (index, next) => {
+    setPassengers((current) => current.map((item, itemIndex) => itemIndex === index ? next : item));
+  };
+
+  const updateVehicle = (index, next) => {
+    setVehicles((current) => current.map((item, itemIndex) => itemIndex === index ? next : item));
+  };
+
+  const importExcel = async () => {
+    try {
+      const imported = await pickPassengerExcel();
+      if (!imported) return;
+      setPassengers(imported.passengers);
+      setExcelName(imported.fileName);
+      Alert.alert('불러오기 완료', `${imported.passengers.length}명의 정보를 불러왔습니다.`);
+    } catch (error) {
+      Alert.alert('엑셀 읽기 실패', error.message);
+    }
+  };
+
+  const validate = () => {
+    if (!vehicles.length) return '차량을 한 대 이상 등록해 주세요.';
+    const plateNumbers = new Set();
+    for (const [index, vehicle] of vehicles.entries()) {
+      const capacity = Number(vehicle.capacity);
+      if (!vehicle.vehicleType.trim() || !vehicle.plateNumber.trim()) return `${index + 1}번 차량의 차종과 차량번호를 입력해 주세요.`;
+      if (!Number.isInteger(capacity) || capacity < 1 || capacity > 100) return `${vehicle.plateNumber} 차량의 정원은 1~100 사이의 정수여야 합니다.`;
+      if (plateNumbers.has(vehicle.plateNumber.trim())) return `차량번호 ${vehicle.plateNumber}가 중복되었습니다.`;
+      plateNumbers.add(vehicle.plateNumber.trim());
+    }
+    if (!center.address.trim()) return '센터 주소를 입력해 주세요.';
+    const entered = passengers.filter((item) => item.name || item.address);
+    if (!entered.length) return '어르신을 한 명 이상 입력해 주세요.';
+    const active = entered.filter((item) => item.attending !== false);
+    if (!active.length) return '출석한 어르신이 없습니다. 출석 토글을 확인해 주세요.';
+    if (active.length > maxPassengerCapacity) return `등록 차량의 2회 운행 최대 수용 인원은 ${maxPassengerCapacity}명입니다.`;
+    for (const [index, passenger] of active.entries()) {
+      if (!passenger.name.trim() || !passenger.address.trim()) return `${index + 1}번 어르신의 이름과 주소를 입력해 주세요.`;
+      if (!HHMM.test(passenger.pickupStart) || !HHMM.test(passenger.pickupEnd)) return `${passenger.name}님의 시간을 HH:MM 형식으로 입력해 주세요.`;
+      if (passenger.pickupStart > passenger.pickupEnd) return `${passenger.name}님의 픽업 하한이 상한보다 늦습니다.`;
+    }
+    return null;
+  };
+
+  const asLocation = (item) => {
+    const output = { name: item.name.trim(), address: item.address.trim() };
+    if (item.latitude !== '' && item.longitude !== '') {
+      output.latitude = Number(item.latitude);
+      output.longitude = Number(item.longitude);
+    }
+    return output;
+  };
+
+  const submit = async () => {
+    const message = validate();
+    if (message) return Alert.alert('입력 확인', message);
+    setLoading(true);
+    try {
+      const active = passengers
+        .filter((item) => item.name || item.address)
+        .filter((item) => item.attending !== false);
+      const activeIds = new Set(active.map((item) => item.id));
+      // 결석·삭제된 어르신을 가리키는 규칙을 그대로 보내면 백엔드가 422로 거절한다.
+      const liveRules = pairRules.filter(
+        (rule) => rule.passengerIds.every((id) => activeIds.has(id)),
+      );
+      const asRule = (rule) => ({ passenger_ids: rule.passengerIds });
+
+      const response = await optimizeRoutes({
+        center: asLocation(center),
+        vehicles: vehicles.map((vehicle) => ({
+          id: vehicle.id,
+          vehicle_type: vehicle.vehicleType.trim(),
+          plate_number: vehicle.plateNumber.trim(),
+          driver_name: (vehicle.driverName || '').trim() || null,
+          capacity: Number(vehicle.capacity),
+        })),
+        passengers: active.map((item) => ({
+          ...asLocation(item),
+          id: item.id,
+          detail_address: (item.detailAddress || '').trim(),
+          attending: true,
+          pickup_start: item.pickupStart,
+          pickup_end: item.pickupEnd,
+          wheelchair: item.wheelchair,
+        })),
+        forbidden_pairs: liveRules.filter((rule) => rule.kind === 'forbidden').map(asRule),
+        required_pairs: liveRules.filter((rule) => rule.kind === 'required').map(asRule),
+      });
+      setResult(response);
+      setScreen('results');
+      try {
+        const today = await fetchTodayCompletions();
+        setCompletedStops(Object.fromEntries(
+          today.records.map((record) => [record.passenger_id, record.completed_at]),
+        ));
+      } catch (_) {
+        // The route is still valid even if completion history refresh is unavailable.
+      }
+      try {
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({
+          vehicles,
+          center,
+          passengers,
+          pairRules,
+          result: response,
+        }));
+      } catch (_) {
+        Alert.alert('로컬 복원 저장 실패', '현재 배차는 사용할 수 있지만 앱 재실행 시 자동 복원되지 않을 수 있습니다.');
+      }
+    } catch (error) {
+      Alert.alert('배차 최적화 실패', error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const completeStop = async ({ stop, tripRound, vehicle }) => {
+    const completionKey = stop.passenger_id;
+    setSavingStops((current) => ({ ...current, [completionKey]: true }));
+    try {
+      const record = await saveRideCompletion({
+        passenger_id: stop.passenger_id,
+        passenger_name: stop.name,
+        vehicle_id: vehicle.vehicle_id,
+        vehicle_type: vehicle.vehicle_type,
+        vehicle_plate_number: vehicle.plate_number,
+        trip_round: tripRound,
+        scheduled_pickup: stop.estimated_pickup,
+      });
+      setCompletedStops((current) => ({
+        ...current,
+        [completionKey]: record.completed_at,
+      }));
+    } catch (error) {
+      Alert.alert('탑승 완료 저장 실패', error.message);
+    } finally {
+      setSavingStops((current) => {
+        const next = { ...current };
+        delete next[completionKey];
+        return next;
+      });
+    }
+  };
+
+  const downloadTodayLog = async () => {
+    try {
+      await Linking.openURL(getTodayCompletionExportUrl());
+    } catch (_) {
+      Alert.alert('다운로드 실패', '백엔드 연결 주소와 네트워크를 확인해 주세요.');
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F1F5F9" />
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={styles.topBar}>
+          <View>
+            <Text style={styles.eyebrow}>DAYCARE ROUTING</Text>
+            <Text style={styles.appTitle}>송영 최적화</Text>
+          </View>
+          <View style={styles.statusPill}><View style={styles.statusDot} /><Text style={styles.statusText}>API {API_URL.replace(/^https?:\/\//, '')}</Text></View>
+        </View>
+
+        <View style={styles.tabs}>
+          <Pressable style={[styles.tab, screen === 'vehicles' && styles.activeTab]} onPress={() => setScreen('vehicles')}>
+            <Text style={[styles.tabText, screen === 'vehicles' && styles.activeTabText]}>1. 차량 관리</Text>
+          </Pressable>
+          <Pressable style={[styles.tab, screen === 'input' && styles.activeTab]} onPress={() => setScreen('input')}>
+            <Text style={[styles.tabText, screen === 'input' && styles.activeTabText]}>2. 대상자</Text>
+          </Pressable>
+          <Pressable style={[styles.tab, screen === 'results' && styles.activeTab]} onPress={() => result && setScreen('results')}>
+            <Text style={[styles.tabText, screen === 'results' && styles.activeTabText, !result && styles.disabledText]}>3. 배차 관제</Text>
+          </Pressable>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          {screen === 'vehicles' ? (
+            <>
+              <Text style={styles.sectionTitle}>차량 관리</Text>
+              <Text style={styles.sectionCaption}>보유 차량을 자유롭게 추가하고 실제 최대 탑승 인원을 설정하세요.</Text>
+              <View style={styles.capacitySummary}>
+                <Text style={styles.capacityLabel}>등록 차량 {vehicles.length}대</Text>
+                <Text style={styles.capacityValue}>2회 최대 {maxPassengerCapacity}명</Text>
+              </View>
+              {vehicles.map((vehicle, index) => (
+                <VehicleForm
+                  key={vehicle.localId}
+                  value={vehicle}
+                  index={index}
+                  onChange={(next) => updateVehicle(index, next)}
+                  onRemove={() => setVehicles((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                />
+              ))}
+              <Pressable style={styles.addButton} onPress={() => setVehicles((current) => [...current, emptyVehicle()])}>
+                <Text style={styles.addButtonText}>＋ 차량 추가</Text>
+              </Pressable>
+              <Pressable style={styles.nextButton} onPress={() => setScreen('input')}>
+                <Text style={styles.optimizeButtonText}>대상자 입력으로 →</Text>
+              </Pressable>
+            </>
+          ) : screen === 'input' ? (
+            <>
+              <Text style={styles.sectionTitle}>센터 정보</Text>
+              <Text style={styles.sectionCaption}>모든 차량은 센터에서 출발하고 센터로 복귀합니다.</Text>
+              <View style={styles.centerCard}>
+                <Text style={styles.inputLabel}>센터명</Text>
+                <TextInput style={styles.input} value={center.name} onChangeText={(text) => setCenter({ ...center, name: text })} placeholder="센터명" />
+                <Text style={styles.inputLabel}>센터 주소</Text>
+                {/* 📍 센터 주소 전용 초록색 검색 버튼 */}
+                <TouchableOpacity
+                  style={{ backgroundColor: '#0f766e', padding: 12, borderRadius: 8, marginTop: 5, marginBottom: 8 }}
+                  onPress={() => setIsCenterAddressModalOpen(true)}
+                >
+                  <Text style={{ color: 'white', textAlign: 'center', fontWeight: 'bold' }}>
+                    {center.address ? '주소 다시 검색하기' : '📍 정확한 센터 주소 찾기'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TextInput style={styles.input} value={center.address} onChangeText={(text) => setCenter({ ...center, address: text })} placeholder="도로명 주소" />
+              </View>
+              {/* 우편번호 검색 팝업창 (센터 주소 전용) */}
+              <AddressSearch
+                visible={isCenterAddressModalOpen}
+                onSelected={(address) => {
+                  setCenter({ ...center, address, latitude: '', longitude: '' });
+                  setIsCenterAddressModalOpen(false);
+                }}
+                onClose={() => setIsCenterAddressModalOpen(false)}
+              />
+
+              <View style={styles.sectionRow}>
+                <View>
+                  <Text style={styles.sectionTitle}>어르신 정보</Text>
+                  <Text style={styles.sectionCaption}>출석 {passengerCount}명 · 등록 차량 2회 최대 {maxPassengerCapacity}명</Text>
+                </View>
+                <Pressable style={styles.excelButton} onPress={importExcel}>
+                  <Text style={styles.excelButtonText}>📊 엑셀 불러오기</Text>
+                </Pressable>
+              </View>
+              {!!excelName && <Text style={styles.fileName}>불러온 파일: {excelName}</Text>}
+
+              {passengers.map((passenger, index) => (
+                <PassengerForm
+                  key={passenger.localId}
+                  value={passenger}
+                  index={index}
+                  onChange={(next) => updatePassenger(index, next)}
+                  onRemove={() => setPassengers((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                />
+              ))}
+
+              <Pressable style={styles.addButton} onPress={() => setPassengers((current) => [...current, emptyPassenger()])}>
+                <Text style={styles.addButtonText}>＋ 어르신 추가</Text>
+              </Pressable>
+
+              <PairRuleEditor
+                passengers={passengers}
+                rules={pairRules}
+                onChange={setPairRules}
+              />
+              <Pressable style={[styles.optimizeButton, loading && styles.disabledButton]} onPress={submit} disabled={loading}>
+                {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.optimizeButtonText}>최적 배차 계산하기 →</Text>}
+              </Pressable>
+              <Text style={styles.hint}>주소 좌표가 없으면 백엔드의 카카오 REST API 키로 자동 변환합니다.</Text>
+            </>
+          ) : (
+            <>
+              <View style={styles.resultsHeading}>
+                <View>
+                  <Text style={styles.sectionTitle}>오늘의 배차 관제</Text>
+                  <Text style={styles.sectionCaption}>차량별 픽업 순서와 도착 예정 시각</Text>
+                </View>
+                <Pressable onPress={() => setScreen('input')}><Text style={styles.editLink}>입력 수정</Text></Pressable>
+              </View>
+              <Pressable style={styles.exportButton} onPress={downloadTodayLog}>
+                <Text style={styles.exportButtonText}>📊 오늘의 송영 일지 다운로드</Text>
+              </Pressable>
+              <VehicleResults
+                result={result}
+                completedStops={completedStops}
+                savingStops={savingStops}
+                onComplete={completeStop}
+              />
+            </>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  safeArea: { flex: 1, backgroundColor: '#F1F5F9' },
+  topBar: { paddingHorizontal: 18, paddingTop: 14, paddingBottom: 11, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  eyebrow: { color: '#0F766E', fontSize: 10, fontWeight: '900', letterSpacing: 1.4 },
+  appTitle: { color: '#0F172A', fontSize: 24, fontWeight: '900', marginTop: 1 },
+  statusPill: { maxWidth: 160, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 9, paddingVertical: 6, borderRadius: 20, backgroundColor: '#FFFFFF' },
+  statusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#10B981', marginRight: 5 },
+  statusText: { color: '#64748B', fontSize: 9, flexShrink: 1 },
+  tabs: { marginHorizontal: 18, backgroundColor: '#E2E8F0', borderRadius: 13, padding: 4, flexDirection: 'row' },
+  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
+  activeTab: { backgroundColor: '#FFFFFF' },
+  tabText: { color: '#64748B', fontSize: 13, fontWeight: '800' },
+  activeTabText: { color: '#0F766E' },
+  disabledText: { opacity: 0.35 },
+  content: { padding: 18, paddingBottom: 50 },
+  sectionTitle: { color: '#0F172A', fontSize: 18, fontWeight: '900' },
+  sectionCaption: { color: '#64748B', fontSize: 12, marginTop: 3, marginBottom: 12 },
+  centerCard: { backgroundColor: '#FFFFFF', padding: 16, borderRadius: 18, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 24 },
+  inputLabel: { color: '#475569', fontWeight: '700', fontSize: 13, marginBottom: 6 },
+  input: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 12, paddingHorizontal: 13, height: 48, fontSize: 15, color: '#0F172A', marginBottom: 12 },
+  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  excelButton: { backgroundColor: '#E0F2FE', borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9 },
+  excelButtonText: { color: '#0369A1', fontWeight: '800', fontSize: 12 },
+  fileName: { color: '#0284C7', fontSize: 11, marginTop: -7, marginBottom: 12 },
+  addButton: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#94A3B8', borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginBottom: 14 },
+  addButtonText: { color: '#475569', fontWeight: '800' },
+  optimizeButton: { backgroundColor: '#0F766E', borderRadius: 15, height: 56, alignItems: 'center', justifyContent: 'center', shadowColor: '#0F766E', shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 4 },
+  nextButton: { backgroundColor: '#0369A1', borderRadius: 15, height: 54, alignItems: 'center', justifyContent: 'center' },
+  optimizeButtonText: { color: '#FFFFFF', fontSize: 17, fontWeight: '900' },
+  disabledButton: { opacity: 0.6 },
+  hint: { color: '#94A3B8', fontSize: 11, textAlign: 'center', marginTop: 10 },
+  resultsHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  editLink: { color: '#0284C7', fontWeight: '800', fontSize: 13 },
+  capacitySummary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ECFDF5', borderRadius: 14, padding: 14, marginBottom: 14 },
+  capacityLabel: { color: '#166534', fontWeight: '800' },
+  capacityValue: { color: '#047857', fontSize: 16, fontWeight: '900' },
+  exportButton: { backgroundColor: '#1D4ED8', borderRadius: 13, paddingVertical: 13, alignItems: 'center', marginBottom: 14 },
+  exportButtonText: { color: '#FFFFFF', fontWeight: '900', fontSize: 14 },
+});

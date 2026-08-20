@@ -1,0 +1,47 @@
+# Render 배포 설정 (Blueprint)
+#
+# 사용법: 이 저장소를 GitHub에 올린 뒤 Render 대시보드 > New > Blueprint 에서 연결하면
+# 아래 정의대로 서비스가 만들어집니다.
+#
+# rootDir 이 backend 이므로 buildCommand/startCommand 는 backend 폴더 기준으로 돕니다.
+
+services:
+  - type: web
+    name: daycare-routing-api
+    runtime: python
+    plan: free
+    region: singapore # 한국에서 가장 가까운 무료 리전
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    # Render는 포트를 $PORT 로 넘겨준다. 하드코딩하면 헬스체크가 실패한다.
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.13
+
+      # --- 아래 4개는 Render 대시보드에서 직접 값을 넣으세요 (sync: false) ---
+      # 키를 이 파일에 적으면 저장소에 그대로 커밋됩니다.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: KAKAO_REST_API_KEY
+        sync: false
+      # 프론트엔드가 접속할 주소. 예: https://내앱.vercel.app,http://localhost:8081
+      # "*" 로 두면 아무 사이트나 이 API를 호출할 수 있습니다.
+      - key: CORS_ORIGINS
+        sync: false
+
+      # --- 배차 엔진 튜닝값 (그대로 두어도 됩니다) ---
+      - key: AVERAGE_SPEED_KPH
+        value: "25"
+      - key: ROAD_DISTANCE_FACTOR
+        value: "1.25"
+      - key: STOP_SERVICE_MINUTES
+        value: "3"
+      - key: TURNAROUND_MINUTES
+        value: "5"
+      # 무료 티어는 CPU가 느리다. 15초로 두면 첫 요청이 타임아웃될 수 있어 줄였다.
+      - key: SOLVER_TIME_LIMIT_SECONDS
+        value: "10"

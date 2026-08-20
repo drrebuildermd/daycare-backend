@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "react-daum-postcode": "^4.0.0",
+    "react-native-webview": "^14.0.1"
+  }
+}

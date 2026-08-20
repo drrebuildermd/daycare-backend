@@ -1,0 +1,54 @@
+{
+  "center": {
+    "name": "행복 주야간보호센터",
+    "address": "서울특별시 중구 세종대로 110",
+    "latitude": 37.5663,
+    "longitude": 126.9779
+  },
+  "vehicles": [
+    {
+      "id": "vehicle-1",
+      "vehicle_type": "스타리아",
+      "plate_number": "12가 3456",
+      "capacity": 7
+    },
+    {
+      "id": "vehicle-2",
+      "vehicle_type": "레이",
+      "plate_number": "34나 5678",
+      "capacity": 4
+    }
+  ],
+  "passengers": [
+    {
+      "id": "P001",
+      "name": "김행복",
+      "address": "서울특별시 종로구 종로 1",
+      "latitude": 37.5704,
+      "longitude": 126.9810,
+      "pickup_start": "08:10",
+      "pickup_end": "08:35",
+      "wheelchair": false
+    },
+    {
+      "id": "P002",
+      "name": "이사랑",
+      "address": "서울특별시 중구 퇴계로 100",
+      "latitude": 37.5612,
+      "longitude": 126.9854,
+      "pickup_start": "08:20",
+      "pickup_end": "08:50",
+      "wheelchair": true
+    },
+    {
+      "id": "P003",
+      "name": "박건강",
+      "address": "서울특별시 서대문구 통일로 120",
+      "latitude": 37.5659,
+      "longitude": 126.9670,
+      "pickup_start": "08:00",
+      "pickup_end": "08:30",
+      "wheelchair": false
+    }
+  ]
+}
