@@ -48,3 +48,15 @@ export const fetchTodayCompletions = () => request('/api/ride-completions/today'
 
 export const getTodayCompletionExportUrl = () =>
   `${API_URL}/api/ride-completions/today/export`;
+
+// --- 기사님 기기 / 배차 전송 ---
+
+export const registerDriverDevice = (payload) =>
+  request('/api/driver-devices', { method: 'POST', body: JSON.stringify(payload) });
+
+// 배차 결과를 서버에 저장하고 담당 기사님 폰으로 푸시를 보낸다.
+export const notifyDispatch = (result) =>
+  request('/api/dispatch/notify', { method: 'POST', body: JSON.stringify(result) });
+
+// 기사님 폰이 본인 동선을 그리려고 받아가는 오늘의 배차.
+export const fetchTodayDispatch = () => request('/api/dispatch/today');

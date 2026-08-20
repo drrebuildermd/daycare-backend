@@ -49,7 +49,21 @@ create index if not exists idx_driver_devices_driver
   on public.driver_devices (driver_name) where is_active;
 
 -- ---------------------------------------------------------------------------
--- 3. 어르신 명단 백업 (기존 테이블에 누락 컬럼 보강)
+-- 3. 오늘의 배차 결과 (기사님 폰이 내려받아 지도를 그린다)
+-- ---------------------------------------------------------------------------
+-- 푸시 알림 본문에는 경로를 다 담을 수 없다(Expo 페이로드 4KB 제한).
+-- 알림에는 vehicle_id만 넣고, 실제 경로는 앱이 여기서 받아간다.
+create table if not exists public.dispatches (
+  id           bigserial primary key,
+  service_date date        not null,
+  payload      jsonb       not null,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  constraint dispatches_service_date_key unique (service_date)
+);
+
+-- ---------------------------------------------------------------------------
+-- 4. 어르신 명단 백업 (기존 테이블에 누락 컬럼 보강)
 -- ---------------------------------------------------------------------------
 create table if not exists public.passengers (
   id             bigserial primary key,
@@ -69,7 +83,7 @@ alter table public.passengers add column if not exists detail_address text;
 
 
 -- ===========================================================================
--- 4. 보안 (RLS) - 아래는 별도로 확인하고 실행하세요
+-- 5. 보안 (RLS) - 아래는 별도로 확인하고 실행하세요
 -- ===========================================================================
 --
 -- 이 테이블들에는 어르신 성함과 자택 주소가 들어갑니다.
@@ -84,5 +98,6 @@ alter table public.passengers add column if not exists detail_address text;
 -- 백엔드는 service_role 키를 쓰므로 정상 동작합니다.
 --
 -- alter table public.ride_completions enable row level security;
+-- alter table public.dispatches        enable row level security;
 -- alter table public.driver_devices    enable row level security;
 -- alter table public.passengers        enable row level security;

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>동선 지도</title>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #E2E8F0;
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+    #map { width: 100%; height: 100%; }
+    #status {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: #F1F5F9; color: #475569; font-size: 14px; font-weight: 700;
+      text-align: center; padding: 24px; line-height: 1.6;
+    }
+    #status.hidden { display: none; }
+    #status.error { background: #FEF2F2; color: #B91C1C; }
+    .marker {
+      transform: translate(-50%, -50%); width: 30px; height: 30px; border-radius: 15px;
+      border: 2.5px solid #fff; box-shadow: 0 2px 6px rgba(15,23,42,.35);
+      color: #fff; font-weight: 800; font-size: 13px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .center-marker {
+      transform: translate(-50%, -50%); padding: 5px 11px; border-radius: 8px;
+      background: #0F172A; border: 2.5px solid #fff; box-shadow: 0 2px 8px rgba(15,23,42,.4);
+      color: #fff; font-weight: 800; font-size: 12px; white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="status">지도를 불러오는 중…</div>
+
+  <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=__KAKAO_JS_KEY__&autoload=false"></script>
+  <script>
+    // 차량별 동선 색상. 웹 관제 화면(RouteMap.web.js)과 같은 팔레트를 쓴다.
+    var ROUTE_COLORS = ['#0F766E', '#1D4ED8', '#B91C1C', '#B45309', '#7E22CE', '#0369A1'];
+
+    var map = null;
+    var drawn = [];
+    var pending = null;   // SDK 로드 전에 도착한 데이터를 담아둔다
+    var ready = false;
+
+    function setStatus(text, isError) {
+      var el = document.getElementById('status');
+      if (!text) { el.className = 'hidden'; return; }
+      el.className = isError ? 'error' : '';
+      el.textContent = text;
+    }
+
+    function markerHtml(label, color) {
+      return '<div class="marker" style="background:' + color + '">' + label + '</div>';
+    }
+
+    // React Native(WebView) 쪽에서 호출한다. SDK가 아직이면 담아뒀다가 나중에 그린다.
+    window.renderRoute = function (payload) {
+      if (typeof payload === 'string') {
+        try { payload = JSON.parse(payload); } catch (e) { return; }
+      }
+      if (!ready) { pending = payload; return; }
+      draw(payload);
+    };
+
+    function draw(payload) {
+      if (!payload || !payload.center) { setStatus('표시할 배차 정보가 없습니다.'); return; }
+
+      var centerPoint = new kakao.maps.LatLng(payload.center.latitude, payload.center.longitude);
+      if (!map) {
+        map = new kakao.maps.Map(document.getElementById('map'), { center: centerPoint, level: 6 });
+        map.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
+      }
+
+      // 다시 그릴 때 이전 것을 지우지 않으면 겹쳐 쌓인다.
+      drawn.forEach(function (item) { item.setMap(null); });
+      drawn = [];
+
+      var bounds = new kakao.maps.LatLngBounds();
+      bounds.extend(centerPoint);
+      var drewAnything = false;
+
+      (payload.vehicles || []).forEach(function (vehicle, vehicleIndex) {
+        // 기사님 폰에서는 본인 차량만 보여준다. focusVehicleId 가 없으면 전체.
+        if (payload.focusVehicleId && vehicle.vehicle_id !== payload.focusVehicleId) return;
+        var color = ROUTE_COLORS[vehicleIndex % ROUTE_COLORS.length];
+
+        (vehicle.trips || []).forEach(function (trip) {
+          var stops = trip.stops || [];
+          if (!trip.used || !stops.length) return;
+          drewAnything = true;
+
+          var points = stops.map(function (stop) {
+            return new kakao.maps.LatLng(stop.latitude, stop.longitude);
+          });
+          var line = new kakao.maps.Polyline({
+            path: [centerPoint].concat(points).concat([centerPoint]),
+            strokeWeight: 4, strokeColor: color, strokeOpacity: 0.85,
+            strokeStyle: trip.round === 2 ? 'shortdash' : 'solid'
+          });
+          line.setMap(map);
+          drawn.push(line);
+
+          stops.forEach(function (stop, i) {
+            bounds.extend(points[i]);
+            var overlay = new kakao.maps.CustomOverlay({
+              position: points[i], content: markerHtml(stop.sequence, color), zIndex: 3
+            });
+            overlay.setMap(map);
+            drawn.push(overlay);
+
+            // 마커를 누르면 어르신 정보를 띄운다.
+            var info = new kakao.maps.InfoWindow({
+              position: points[i],
+              content: '<div style="padding:7px 10px;font-size:12px;white-space:nowrap;">'
+                + '<b>' + stop.sequence + '. ' + stop.name + '</b><br/>'
+                + (stop.estimated_pickup || '') + ' 픽업 예정</div>'
+            });
+            kakao.maps.event.addListener(overlay, 'click', function () { info.open(map); });
+          });
+        });
+      });
+
+      var centerOverlay = new kakao.maps.CustomOverlay({
+        position: centerPoint, content: '<div class="center-marker">🏫 센터</div>', zIndex: 5
+      });
+      centerOverlay.setMap(map);
+      drawn.push(centerOverlay);
+
+      map.setBounds(bounds, 48, 48, 48, 48);
+      setStatus(drewAnything ? '' : '오늘 배정된 운행이 없습니다.');
+    }
+
+    if (window.kakao && window.kakao.maps) {
+      kakao.maps.load(function () {
+        ready = true;
+        setStatus('');
+        if (pending) { draw(pending); pending = null; }
+        // 로드가 끝났음을 앱에 알린다. 앱은 이 신호를 받고 데이터를 보낸다.
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'map-ready' }));
+        }
+      });
+    } else {
+      setStatus('카카오맵 SDK를 불러오지 못했습니다.\n서버의 KAKAO_JS_KEY와 등록된 사이트 도메인을 확인해 주세요.', true);
+    }
+  </script>
+</body>
+</html>

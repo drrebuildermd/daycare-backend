@@ -64,7 +64,7 @@ const centerMarkerHtml = `
     color: #FFFFFF; font-weight: 800; font-size: 12px; white-space: nowrap;
   ">🏫 센터</div>`;
 
-export default function RouteMap({ center, vehicles }) {
+export default function RouteMap({ center, vehicles, focusVehicleId }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const drawnRef = useRef([]);
@@ -113,6 +113,7 @@ export default function RouteMap({ center, vehicles }) {
 
         (vehicles || []).forEach((vehicle, vehicleIndex) => {
           if (hiddenVehicles[vehicle.vehicle_id]) return;
+          if (focusVehicleId && vehicle.vehicle_id !== focusVehicleId) return;
           const color = ROUTE_COLORS[vehicleIndex % ROUTE_COLORS.length];
 
           (vehicle.trips || []).forEach((trip) => {
@@ -165,7 +166,7 @@ export default function RouteMap({ center, vehicles }) {
       });
 
     return () => { cancelled = true; };
-  }, [center, vehicles, hiddenVehicles]);
+  }, [center, vehicles, hiddenVehicles, focusVehicleId]);
 
   if (!center) return null;
 

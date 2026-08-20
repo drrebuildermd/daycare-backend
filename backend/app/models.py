@@ -219,3 +219,23 @@ class DriverDeviceRecord(DriverDeviceCreate):
 
 class DriverDeviceList(BaseModel):
     devices: list[DriverDeviceRecord] = Field(default_factory=list)
+
+
+class DriverNotifyOutcome(BaseModel):
+    """차량 한 대에 대한 발송 결과. 관리자 화면에 그대로 보여준다."""
+
+    vehicle_label: str
+    driver_name: str | None = None
+    sent: int = 0
+    message: str
+
+
+class DispatchNotifyResult(BaseModel):
+    sent: int = 0
+    failed: int = 0
+    outcomes: list[DriverNotifyOutcome] = Field(default_factory=list)
+
+
+class DispatchToday(BaseModel):
+    service_date: str
+    result: OptimizeResponse | None = None

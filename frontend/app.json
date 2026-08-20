@@ -36,6 +36,12 @@
     },
     "plugins": [
       "expo-document-picker"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "c523e7a6-1754-4a4b-a7ce-b03753a486ff"
+      }
+    },
+    "owner": "dr.rebuilder.md"
   }
 }

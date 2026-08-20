@@ -2,17 +2,21 @@ import csv
 import io
 from contextlib import asynccontextmanager
 from datetime import date
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 
 from app.config import Settings, get_settings
 from app.database import init_database, list_completions, today_kst, upsert_completion
 from app.geocoding import resolve_locations
+from app.dispatch import load_dispatch, notify_drivers, save_dispatch
 from app.drivers import deactivate_device, list_devices, register_device
 from app.models import (
+    DispatchNotifyResult,
+    DispatchToday,
     DriverDeviceCreate,
     DriverDeviceList,
     DriverDeviceRecord,
@@ -92,6 +96,36 @@ def read_driver_devices(driver_name: str | None = None) -> DriverDeviceList:
 @app.delete("/api/driver-devices/{expo_push_token}", status_code=204)
 def delete_driver_device(expo_push_token: str) -> None:
     deactivate_device(expo_push_token)
+
+
+@app.post("/api/dispatch/notify", response_model=DispatchNotifyResult)
+async def send_dispatch(result: OptimizeResponse) -> DispatchNotifyResult:
+    """배차 결과를 저장하고 담당 기사님 폰으로 푸시를 보낸다."""
+    service_date = today_kst()
+    save_dispatch(result, service_date)
+    return await notify_drivers(result, service_date)
+
+
+@app.get("/api/dispatch/today", response_model=DispatchToday)
+def read_today_dispatch() -> DispatchToday:
+    """기사님 폰이 본인 동선을 그리려고 받아가는 오늘의 배차."""
+    service_date = today_kst()
+    return DispatchToday(
+        service_date=service_date.isoformat(), result=load_dispatch(service_date)
+    )
+
+
+@app.get("/map", response_class=HTMLResponse)
+def map_page(settings: Settings = Depends(get_settings)) -> HTMLResponse:
+    """네이티브 앱의 WebView가 여는 지도 페이지.
+
+    HTML 문자열을 앱에 넣지 않고 서버가 실제 URL로 서빙하는 이유는,
+    카카오맵 자바스크립트 키가 요청 도메인을 검사하기 때문이다.
+    이 서버 주소를 Kakao Developers > 플랫폼 > Web 에 등록하면 된다.
+    """
+    html = (Path(__file__).parent / "static" / "map.html").read_text(encoding="utf-8")
+    html = html.replace("__KAKAO_JS_KEY__", settings.kakao_js_key or "")
+    return HTMLResponse(content=html)
 
 
 @app.post("/api/optimize", response_model=OptimizeResponse)

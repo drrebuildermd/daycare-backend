@@ -20,7 +20,9 @@ import {
 import {
   API_URL,
   fetchTodayCompletions,
+  fetchTodayDispatch,
   getTodayCompletionExportUrl,
+  notifyDispatch,
   optimizeRoutes,
   saveRideCompletion,
 } from './src/api';
@@ -30,6 +32,8 @@ import VehicleResults from './src/components/VehicleResults';
 import { pickPassengerExcel } from './src/excel';
 import AddressSearch from './src/components/AddressSearch';
 import PairRuleEditor from './src/components/PairRuleEditor';
+import DriverPushPanel from './src/components/DriverPushPanel';
+import { listenForDispatchTaps } from './src/push';
 
 const emptyPassenger = () => ({
   localId: `${Date.now()}-${Math.random()}`,
@@ -71,6 +75,9 @@ export default function App() {
   const [savingStops, setSavingStops] = useState({});
   const [isCenterAddressModalOpen, setIsCenterAddressModalOpen] = useState(false);
   const [pairRules, setPairRules] = useState([]);
+  const [sending, setSending] = useState(false);
+  // 기사님이 알림을 눌러 들어온 경우, 본인 차량 동선만 보여주기 위한 값.
+  const [focusVehicleId, setFocusVehicleId] = useState(null);
   // 복원이 끝나기 전에 저장이 돌면 빈 초기값이 기존 명단을 덮어쓴다.
   const [restored, setRestored] = useState(false);
 
@@ -104,6 +111,19 @@ export default function App() {
     };
     restoreSession();
   }, []);
+
+  // 기사님이 배차 알림을 누르면 오늘의 배차를 내려받아 본인 차량 지도로 바로 들어간다.
+  // 기사님 폰에는 명단이 없으므로 서버에서 받아와야 한다.
+  useEffect(() => listenForDispatchTaps(async (vehicleId) => {
+    setFocusVehicleId(vehicleId);
+    setScreen('results');
+    try {
+      const today = await fetchTodayDispatch();
+      if (today.result) setResult(today.result);
+    } catch (error) {
+      Alert.alert('배차 정보를 불러오지 못했습니다', error.message);
+    }
+  }), []);
 
   // 명단·차량·규칙은 바뀔 때마다 저장한다.
   // 예전에는 배차를 눌러야만 저장돼서, 입력만 하고 앱을 닫으면 전부 날아갔다.
@@ -273,6 +293,25 @@ export default function App() {
     }
   };
 
+  const sendDispatch = async () => {
+    if (!result) return;
+    setSending(true);
+    try {
+      const outcome = await notifyDispatch(result);
+      const lines = outcome.outcomes.map(
+        (item) => `· ${item.vehicle_label}: ${item.message}`,
+      );
+      Alert.alert(
+        outcome.sent ? `📤 ${outcome.sent}대 발송 완료` : '발송된 알림이 없습니다',
+        lines.join('\n') || '전송할 차량이 없습니다.',
+      );
+    } catch (error) {
+      Alert.alert('배차 전송 실패', error.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
   const downloadTodayLog = async () => {
     try {
       await Linking.openURL(getTodayCompletionExportUrl());
@@ -329,6 +368,10 @@ export default function App() {
               <Pressable style={styles.nextButton} onPress={() => setScreen('input')}>
                 <Text style={styles.optimizeButtonText}>대상자 입력으로 →</Text>
               </Pressable>
+
+              <View style={styles.driverPanelSpacing}>
+                <DriverPushPanel vehicles={vehicles} />
+              </View>
             </>
           ) : screen === 'input' ? (
             <>
@@ -404,14 +447,33 @@ export default function App() {
                 </View>
                 <Pressable onPress={() => setScreen('input')}><Text style={styles.editLink}>입력 수정</Text></Pressable>
               </View>
-              <Pressable style={styles.exportButton} onPress={downloadTodayLog}>
-                <Text style={styles.exportButtonText}>📊 오늘의 송영 일지 다운로드</Text>
-              </Pressable>
+              {!!focusVehicleId && (
+                <Pressable style={styles.focusBanner} onPress={() => setFocusVehicleId(null)}>
+                  <Text style={styles.focusBannerText}>
+                    내 차량 동선만 보는 중 · 눌러서 전체 보기
+                  </Text>
+                </Pressable>
+              )}
+              <View style={styles.actionRow}>
+                <Pressable
+                  style={[styles.dispatchButton, sending && styles.disabledButton]}
+                  onPress={sendDispatch}
+                  disabled={sending}
+                >
+                  {sending
+                    ? <ActivityIndicator color="#FFFFFF" />
+                    : <Text style={styles.exportButtonText}>📤 배차 전송</Text>}
+                </Pressable>
+                <Pressable style={styles.exportButton} onPress={downloadTodayLog}>
+                  <Text style={styles.exportButtonText}>📊 송영 일지</Text>
+                </Pressable>
+              </View>
               <VehicleResults
                 result={result}
                 completedStops={completedStops}
                 savingStops={savingStops}
                 onComplete={completeStop}
+                focusVehicleId={focusVehicleId}
               />
             </>
           )}
@@ -458,6 +520,11 @@ const styles = StyleSheet.create({
   capacitySummary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ECFDF5', borderRadius: 14, padding: 14, marginBottom: 14 },
   capacityLabel: { color: '#166534', fontWeight: '800' },
   capacityValue: { color: '#047857', fontSize: 16, fontWeight: '900' },
-  exportButton: { backgroundColor: '#1D4ED8', borderRadius: 13, paddingVertical: 13, alignItems: 'center', marginBottom: 14 },
+  actionRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  exportButton: { flex: 1, backgroundColor: '#1D4ED8', borderRadius: 13, paddingVertical: 13, alignItems: 'center' },
+  dispatchButton: { flex: 1, backgroundColor: '#0F766E', borderRadius: 13, paddingVertical: 13, alignItems: 'center', justifyContent: 'center' },
+  driverPanelSpacing: { marginTop: 18 },
+  focusBanner: { backgroundColor: '#ECFDF5', borderWidth: 1, borderColor: '#A7F3D0', borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginBottom: 12 },
+  focusBannerText: { color: '#047857', fontWeight: '800', fontSize: 12.5 },
   exportButtonText: { color: '#FFFFFF', fontWeight: '900', fontSize: 14 },
 });

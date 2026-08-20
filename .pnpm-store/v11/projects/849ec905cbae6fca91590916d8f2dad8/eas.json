@@ -17,8 +17,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://192.168.45.83:8000",
-        "EXPO_PUBLIC_KAKAO_JS_KEY": ""
+        "EXPO_PUBLIC_API_URL": "https://daycare-routing-api.onrender.com",
+        "EXPO_PUBLIC_KAKAO_JS_KEY": "ab59552e1add006cb93032341b3f24fe"
       }
     },
     "production": {
@@ -27,8 +27,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://192.168.45.83:8000",
-        "EXPO_PUBLIC_KAKAO_JS_KEY": ""
+        "EXPO_PUBLIC_API_URL": "https://daycare-routing-api.onrender.com",
+        "EXPO_PUBLIC_KAKAO_JS_KEY": "ab59552e1add006cb93032341b3f24fe"
       }
     }
   },

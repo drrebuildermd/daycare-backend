@@ -91,7 +91,13 @@ const Trip = ({ trip, vehicle, completedStops, savingStops, onComplete }) => (
   </View>
 );
 
-export default function VehicleResults({ result, completedStops, savingStops, onComplete }) {
+export default function VehicleResults({
+  result, completedStops, savingStops, onComplete, focusVehicleId,
+}) {
+  // 기사님이 알림으로 들어온 경우 본인 차량만 보여준다.
+  const shownVehicles = (result.vehicles || []).filter(
+    (vehicle) => !focusVehicleId || vehicle.vehicle_id === focusVehicleId,
+  );
   return (
     <View>
       <View style={styles.summary}>
@@ -102,11 +108,15 @@ export default function VehicleResults({ result, completedStops, savingStops, on
 
       <View style={styles.splitRow}>
         <View style={styles.mapPane}>
-          <RouteMap center={result.center} vehicles={result.vehicles || []} />
+          <RouteMap
+            center={result.center}
+            vehicles={result.vehicles || []}
+            focusVehicleId={focusVehicleId}
+          />
         </View>
 
         <View style={styles.listPane}>
-      {(result.vehicles || []).map((vehicle) => (
+      {shownVehicles.map((vehicle) => (
         <View key={vehicle.vehicle_id} style={styles.vehicleCard}>
           <View style={styles.vehicleHeader}>
             <View>
