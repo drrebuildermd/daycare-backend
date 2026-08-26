@@ -1,37 +1,42 @@
 """라이브 Render 서버 대상 솔라피 문자 발송 E2E 검증.
 
-프론트엔드를 거치지 않고 서버만 단독으로 검증한다. 3단계로 나눈 이유는,
-/api/ride-completions 응답만으로는 문자가 실제로 나갔는지 알 수 없기 때문이다.
-(문자 실패는 try/except로 삼켜지고 200이 반환된다 — 의도된 동작)
+프론트엔드를 거치지 않고 서버만 단독으로 검증한다.
 
-  A. 솔라피 자격증명/서명 검증  : 잔액 조회(읽기 전용, 무과금)
-  B. 라이브 서버로 탑승완료 POST : Render가 200을 돌려주는지
-  C. 솔라피 발송 이력 조회       : B가 실제로 문자를 만들었는지 (핵심)
+  A. 솔라피 자격증명/서명 검증  : 잔액 조회 (읽기 전용, 무과금)
+  B. 라이브 서버로 탑승완료 POST : 응답의 sms_sent 가 권위 있는 신호
+  C. 솔라피 발송 이력 교차 확인  : 이번 실행 고유 표식으로 정확 일치 검사
 
-C가 있어야 "Render가 보냈다"와 "Render가 조용히 건너뛰었다"를 구분할 수 있다.
+주의사항 두 가지:
+  - curl 로 보내면 안 된다. Git Bash 가 한글을 cp949 로 인코딩해
+    FastAPI 가 본문 파싱에 실패(400)한다. httpx 로 보내야 UTF-8 로 간다.
+  - 이력 검사는 부분 문자열이 아니라 실행마다 새로 만드는 표식으로 해야 한다.
+    "발송점검" 같은 고정 문자열은 과거 테스트 문자에 걸려 오탐이 난다.
 
-주의: 실제 문자가 1건 발송된다. 수신번호는 등록된 발신번호(센터 번호)로 자가발송한다.
-실행: .venv\\Scripts\\python.exe -X utf8 test_live_sms.py
+실제 문자 1건이 발송된다. 수신번호는 등록된 발신번호(센터 번호)로 자가발송한다.
+실행: backend 폴더에서  .venv\\Scripts\\python.exe -X utf8 test_live_sms.py
 """
 import hashlib
 import hmac
 import sys
 import time
 import uuid
-from datetime import datetime, timezone
 
 import httpx
 
 from app.config import get_settings
+from app.supabase_client import get_supabase
 
 LIVE = "https://daycare-routing-api.onrender.com"
 SOLAPI = "https://api.solapi.com"
-TEST_PASSENGER_ID = "ZZ-SMS-SELFTEST"
 
 settings = get_settings()
 API_KEY = settings.solapi_api_key
 API_SECRET = settings.solapi_api_secret
 SENDER = settings.solapi_sender
+
+# 이번 실행을 유일하게 식별하는 표식. 과거 문자와 섞이지 않게 한다.
+MARK = "SRVCHK" + uuid.uuid4().hex[:6].upper()
+TEST_ID = "ZZ-" + MARK
 
 failures = []
 
@@ -48,15 +53,12 @@ def mask(number):
 
 
 def auth_header():
-    """app/main.py 의 send_test_sms 와 동일한 서명 방식."""
     date = time.strftime("%Y-%m-%dT%H:%M:%S%z")
     salt = uuid.uuid1().hex
     signature = hmac.new(
         API_SECRET.encode("utf-8"), (date + salt).encode("utf-8"), hashlib.sha256
     ).hexdigest()
-    return (
-        f"HMAC-SHA256 apiKey={API_KEY}, date={date}, salt={salt}, signature={signature}"
-    )
+    return f"HMAC-SHA256 apiKey={API_KEY}, date={date}, salt={salt}, signature={signature}"
 
 
 print("=== 사전 확인 ===")
@@ -64,87 +66,84 @@ check("로컬에 솔라피 자격증명 존재", bool(API_KEY and API_SECRET and
 if failures:
     print("\n자격증명이 없어 중단합니다. backend/.env 를 확인하세요.")
     sys.exit(1)
-print(f"  발신번호: {mask(SENDER)}")
+print(f"  발신번호  : {mask(SENDER)}")
+print(f"  식별 표식 : {MARK}")
 
 # ---------------------------------------------------------------------------
 print("\n=== A. 솔라피 자격증명 / 서명 검증 (읽기 전용, 무과금) ===")
 try:
     with httpx.Client(timeout=20.0) as client:
-        r = client.get(
-            f"{SOLAPI}/cash/v1/balance", headers={"Authorization": auth_header()}
-        )
-    check("잔액 조회 HTTP 200 (= 서명 유효)", r.status_code == 200, f"HTTP {r.status_code}")
+        r = client.get(f"{SOLAPI}/cash/v1/balance", headers={"Authorization": auth_header()})
+    check("잔액 조회 HTTP 200 (= 서명 유효)", r.status_code == 200,
+          f"HTTP {r.status_code} {'' if r.status_code == 200 else r.text[:120]}")
     if r.status_code == 200:
-        balance = r.json()
-        point = balance.get("point", 0)
-        cash = balance.get("balance", 0)
-        check("발송 가능한 잔액 보유", (point or 0) + (cash or 0) > 0,
-              f"balance={cash} point={point}")
-    else:
-        check("서명 오류 아님", False, r.text[:150])
+        b = r.json()
+        check("발송 가능한 잔액 보유", (b.get("point") or 0) + (b.get("balance") or 0) > 0,
+              f"balance={b.get('balance')} point={b.get('point')}")
 except httpx.HTTPError as error:
     check("솔라피 접속", False, str(error))
 
 # ---------------------------------------------------------------------------
-print("\n=== B. 라이브 Render 서버로 탑승완료 POST ===")
-sent_at = datetime.now(timezone.utc)
+print("\n=== B. 라이브 서버로 탑승완료 POST ===")
 payload = {
-    "passenger_id": TEST_PASSENGER_ID,
-    "passenger_name": "발송점검",
+    "passenger_id": TEST_ID,
+    "passenger_name": MARK,
     "vehicle_id": "selftest",
     "vehicle_type": "점검용",
     "vehicle_plate_number": "00가0000",
     "trip_round": 1,
     "scheduled_pickup": "08:00",
-    "center_name": "발송 점검",
-    # 등록된 발신번호로 자가발송한다. 외부인에게 문자가 가지 않도록.
+    "center_name": "서버발송점검",
     "guardian_phone": SENDER,
 }
+sms_sent = None
 try:
-    with httpx.Client(timeout=120.0) as client:
+    with httpx.Client(timeout=150.0) as client:
         r = client.post(f"{LIVE}/api/ride-completions", json=payload)
-    check("HTTP 200", r.status_code == 200, f"HTTP {r.status_code} {r.text[:120]}")
+    check("HTTP 200", r.status_code == 200, f"HTTP {r.status_code} {r.text[:150]}")
     if r.status_code == 200:
         record = r.json()
-        check("DB 저장 확인 (completed_at 반환)", bool(record.get("completed_at")),
-              record.get("completed_at"))
-        # guardian_phone 은 DB에 저장하지 않으므로 응답에 실려 오지 않는다.
-        # 번호가 서버까지 갔는지는 C단계(실제 발송 이력)로 확인한다.
+        check("DB 저장 확인", bool(record.get("completed_at")), record.get("completed_at"))
+        sms_sent = record.get("sms_sent")
+        check("서버가 문자 결과를 보고함 (구버전이면 null)", sms_sent is not None, sms_sent)
+        print(f"     sms_sent    : {sms_sent}")
+        print(f"     sms_message : {record.get('sms_message')}")
+        check("서버가 문자 발송에 성공", sms_sent is True, record.get("sms_message"))
 except httpx.HTTPError as error:
     check("라이브 서버 접속", False, str(error))
 
 # ---------------------------------------------------------------------------
-print("\n=== C. 솔라피 발송 이력에서 실제 발송 확인 (핵심) ===")
-print("  서버가 문자를 만들 시간을 잠깐 줍니다...")
-time.sleep(6)
+print("\n=== C. 솔라피 발송 이력 교차 확인 ===")
+if sms_sent is not True:
+    print("  B에서 발송되지 않아 건너뜁니다.")
+else:
+    time.sleep(6)
+    try:
+        with httpx.Client(timeout=20.0) as client:
+            r = client.get(f"{SOLAPI}/messages/v4/list", params={"limit": 20},
+                           headers={"Authorization": auth_header()})
+        check("발송 이력 조회 HTTP 200", r.status_code == 200, f"HTTP {r.status_code}")
+        if r.status_code == 200:
+            msgs = list(r.json().get("messageList", {}).values())
+            hit = [m for m in msgs if MARK in (m.get("text") or "")]
+            check("이번 실행의 문자를 이력에서 발견", bool(hit),
+                  f"최근 {len(msgs)}건 중 {len(hit)}건")
+            if hit:
+                m = hit[0]
+                print(f"     상태코드 : {m.get('statusCode')} ({m.get('statusMessage')})")
+                print(f"     수신     : {mask(m.get('to'))}")
+    except httpx.HTTPError as error:
+        check("솔라피 이력 조회", False, str(error))
+
+# ---------------------------------------------------------------------------
+print("\n=== 정리: 테스트로 남은 일지 행 삭제 ===")
 try:
-    with httpx.Client(timeout=20.0) as client:
-        r = client.get(
-            f"{SOLAPI}/messages/v4/list",
-            params={"limit": 20},
-            headers={"Authorization": auth_header()},
-        )
-    check("발송 이력 조회 HTTP 200", r.status_code == 200, f"HTTP {r.status_code}")
-    if r.status_code == 200:
-        messages = list(r.json().get("messageList", {}).values())
-        recent = [
-            m for m in messages
-            if "발송점검" in (m.get("text") or "")
-        ]
-        check("이번 요청으로 생성된 문자 발견", bool(recent),
-              f"최근 {len(messages)}건 중 {len(recent)}건 일치")
-        if recent:
-            newest = recent[0]
-            print(f"     상태코드 : {newest.get('statusCode')}")
-            print(f"     상태메시지: {newest.get('statusMessage')}")
-            print(f"     수신번호  : {mask(newest.get('to'))}")
-            print(f"     본문      : {(newest.get('text') or '')[:60]}")
-            # 2000 = 정상 접수/발송. 4xxx/5xxx 는 실패.
-            code = str(newest.get("statusCode") or "")
-            check("발송 성공 상태코드", code in ("2000", "3000", "4000"),
-                  f"statusCode={code} ({newest.get('statusMessage')})")
-except httpx.HTTPError as error:
-    check("솔라피 이력 조회", False, str(error))
+    get_supabase().table("ride_completions").delete().eq("passenger_id", TEST_ID).execute()
+    left = get_supabase().table("ride_completions").select("passenger_id") \
+        .like("passenger_id", "ZZ-%").execute().data
+    check("테스트 행 정리됨", len(left) == 0, f"잔여 {len(left)}건")
+except Exception as error:  # noqa: BLE001
+    check("테스트 행 정리", False, str(error))
 
 print()
 if failures:
