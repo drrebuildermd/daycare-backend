@@ -26,6 +26,8 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
   const set = (field, nextValue) => onChange({ ...value, [field]: nextValue });
   // 명단에는 남기고 배차에서만 빼기 위한 값. 기존 데이터에는 없으므로 기본을 출석으로 본다.
   const attending = value.attending !== false;
+  // 백엔드와 같은 기준으로 판정한다. (숫자만 뽑아 10자리 미만이면 발송 건너뜀)
+  const hasGuardianPhone = (value.guardianPhone || '').replace(/[^0-9]/g, '').length >= 10;
 
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
 
@@ -59,14 +61,19 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
       </View>
       <Field label="어르신 이름" value={value.name} onChangeText={(text) => set('name', text)} placeholder="홍길동" />
       
-      {/* 🚨 [신규 장착] 보호자 연락처 입력칸 추가 */}
-      <Field 
-        label="보호자 연락처" 
-        value={value.guardianPhone} 
-        onChangeText={(text) => set('guardianPhone', text)} 
-        placeholder="010-1234-5678 (숫자만 입력 가능)" 
-        keyboardType="phone-pad" 
+      {/* 보호자 연락처. 비어 있으면 탑승 완료 문자가 발송되지 않는다. */}
+      <Field
+        label="보호자 연락처"
+        value={value.guardianPhone}
+        onChangeText={(text) => set('guardianPhone', text)}
+        placeholder="010-1234-5678"
+        keyboardType="phone-pad"
       />
+      {attending && !hasGuardianPhone && (
+        <Text style={styles.phoneWarning}>
+          ⚠️ 번호가 없으면 탑승 완료 문자가 발송되지 않습니다.
+        </Text>
+      )}
 
       {/* 개조된 주소 검색 영역 */}
       <View style={{ marginBottom: 15 }}>
@@ -146,6 +153,7 @@ const styles = StyleSheet.create({
   remove: { color: '#DC2626', fontWeight: '700', fontSize: 13 },
   field: { marginBottom: 12 },
   label: { color: '#475569', fontWeight: '700', fontSize: 13, marginBottom: 6 },
+  phoneWarning: { color: '#B45309', fontSize: 12, fontWeight: '700', marginTop: -6, marginBottom: 12, lineHeight: 17 },
   input: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 12, paddingHorizontal: 13, height: 48, fontSize: 16, color: '#0F172A' },
   timeRow: { flexDirection: 'row', alignItems: 'center' },
   timeField: { flex: 1 },
