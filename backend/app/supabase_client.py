@@ -21,6 +21,43 @@ MISSING_MESSAGE = (
 )
 
 
+def key_kind(token: str | None) -> str:
+    """백엔드가 어떤 종류의 키를 쓰는지 판별한다.
+
+    RLS 를 켜기 전에 반드시 확인해야 한다. 공개용 키(publishable/anon)는
+    RLS 의 적용을 받으므로, 정책 없이 RLS 를 켜면 백엔드가 즉시
+    테이블에 접근하지 못하고 서버가 기동조차 못 한다.
+    """
+    if not token:
+        return "none"
+    if token.startswith("sb_secret_"):
+        return "secret"
+    if token.startswith("sb_publishable_"):
+        return "publishable"
+    # 구형 JWT 키. payload 의 role 클레임으로 구분한다.
+    if token.count(".") == 2:
+        import base64
+        import json
+
+        try:
+            payload = token.split(".")[1]
+            payload += "=" * (-len(payload) % 4)
+            role = json.loads(base64.urlsafe_b64decode(payload)).get("role")
+            return "secret" if role == "service_role" else "publishable"
+        except Exception:  # noqa: BLE001
+            return "unknown"
+    return "unknown"
+
+
+PUBLISHABLE_WARNING = (
+    "[보안 경고] 백엔드가 공개용 Supabase 키를 쓰고 있습니다.\n"
+    "  - 지금은 RLS 가 꺼져 있어 동작하지만, 같은 등급의 키가 앱에도 들어 있어\n"
+    "    앱 번들만 뜯으면 어르신 개인정보를 전부 조회할 수 있습니다.\n"
+    "  - SUPABASE_KEY 를 secret 키(sb_secret_...)로 교체한 뒤 RLS 를 켜세요.\n"
+    "  - 순서를 바꾸면(먼저 RLS) 서버가 기동하지 못합니다."
+)
+
+
 def is_configured() -> bool:
     settings = get_settings()
     return bool(settings.supabase_url and settings.supabase_key)

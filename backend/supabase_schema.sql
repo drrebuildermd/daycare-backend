@@ -83,21 +83,46 @@ alter table public.passengers add column if not exists detail_address text;
 
 
 -- ===========================================================================
--- 5. 보안 (RLS) - 아래는 별도로 확인하고 실행하세요
+-- 5. 보안 (RLS) - 순서를 반드시 지키세요
 -- ===========================================================================
 --
--- 이 테이블들에는 어르신 성함과 자택 주소가 들어갑니다.
--- Supabase 테이블은 RLS를 켜지 않으면 anon 키만으로 외부에서 전량 조회가 가능합니다.
--- anon 키는 앱에 노출되는 공개 키이므로, 아래 두 가지를 반드시 함께 적용하세요.
+-- 이 테이블들에는 어르신 성함, 자택 주소, 보호자 연락처가 들어갑니다.
+-- RLS 를 켜지 않으면 공개용 키만으로 외부에서 전량 조회가 가능합니다.
+-- 그 키는 앱 번들에 박혀 배포되므로, 앱을 받은 사람은 누구나 꺼낼 수 있습니다.
 --
---   (1) 백엔드 .env 의 SUPABASE_KEY 를 'service_role' 키로 교체
---       (service_role 키는 RLS를 우회합니다. 절대 프론트엔드에 넣지 마세요.)
---   (2) 아래 SQL 실행
+-- 그런데 RLS 를 먼저 켜면 서비스가 즉시 멈춥니다.
+-- 공개용 키도 RLS 의 적용을 받기 때문에, 백엔드가 공개용 키를 쓰는 동안에는
+-- 테이블에 접근하지 못하고 서버가 기동조차 하지 못합니다.
 --
--- 정책을 만들지 않고 RLS만 켜면 anon 키로는 아무것도 못 읽습니다.
--- 백엔드는 service_role 키를 쓰므로 정상 동작합니다.
+-- 아래 순서를 그대로 따르세요.
 --
+--   1) Supabase > Project Settings > API Keys 에서 secret 키를 발급합니다.
+--      (sb_secret_... 로 시작. 구형 프로젝트는 service_role 키)
+--      이 키는 RLS 를 우회합니다. 절대 프론트엔드나 저장소에 넣지 마세요.
+--
+--   2) backend/.env 와 Render 대시보드 Environment 의 SUPABASE_KEY 를
+--      그 secret 키로 교체하고 재배포합니다.
+--
+--   3) 교체가 반영됐는지 확인합니다. 'secret' 이 나와야 합니다.
+--      curl -s https://daycare-routing-api.onrender.com/api/health
+--      -> {"supabase_key_kind":"secret", ...}
+--
+--      'publishable' 이 나오면 4번을 실행하지 마세요. 서버가 죽습니다.
+--
+--   4) 아래 SQL 을 실행합니다.
+
 -- alter table public.ride_completions enable row level security;
 -- alter table public.dispatches        enable row level security;
 -- alter table public.driver_devices    enable row level security;
 -- alter table public.passengers        enable row level security;
+
+--
+--   5) 다시 /api/health 가 200 인지, 배차와 탑승완료가 동작하는지 확인합니다.
+--
+-- 참고: 정책(policy)을 만들지 않으면 공개용 키로는 아무것도 읽지 못합니다.
+-- 이는 의도된 것입니다. 백엔드만 secret 키로 접근하면 됩니다.
+--
+-- 다만 앱의 '실시간 갱신'(수파베이스 직접 구독)은 공개용 키를 쓰므로 함께 멈춥니다.
+-- 이 앱에는 로그인이 없어 "우리 앱만 허용"하는 정책을 만들 수 없습니다.
+-- anon 에게 SELECT 를 열면 곧 전체 공개와 같습니다.
+-- 실시간이 필요하면 백엔드 경유 방식으로 다시 만들거나 Supabase Auth 를 붙이세요.

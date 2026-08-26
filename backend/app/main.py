@@ -33,7 +33,13 @@ from app.models import (
     RideCompletionRecord,
 )
 from app.optimizer import optimize_routes
-from app.supabase_client import MISSING_MESSAGE, get_supabase, is_configured
+from app.supabase_client import (
+    MISSING_MESSAGE,
+    PUBLISHABLE_WARNING,
+    get_supabase,
+    is_configured,
+    key_kind,
+)
 
 load_dotenv()
 
@@ -44,6 +50,10 @@ async def lifespan(app: FastAPI):
     # 설정이 없는 채로 뜨면 '탑승 완료'를 누르는 순간에야 실패하므로 여기서 막는다.
     if not is_configured():
         raise RuntimeError(MISSING_MESSAGE)
+    # 공개용 키로 돌고 있으면 배포 로그에 크게 남긴다. 죽이지는 않는다 —
+    # 지금 죽이면 운영이 멈추고, 교체는 사람이 해야 하는 일이다.
+    if key_kind(get_settings().supabase_key) == "publishable":
+        print(PUBLISHABLE_WARNING)
     init_database(get_settings())
     yield
 
@@ -159,6 +169,9 @@ def health(settings: Settings = Depends(get_settings)) -> dict:
             "secret_length": len(settings.solapi_api_secret or ""),
             "sender": bool(settings.solapi_sender),
         },
+        # RLS 를 켜기 전/후에 키 교체가 실제로 반영됐는지 밖에서 확인하는 용도.
+        # 'secret' 이어야 RLS 를 켜도 백엔드가 살아남는다.
+        "supabase_key_kind": key_kind(settings.supabase_key),
     }
 
 
