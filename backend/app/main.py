@@ -67,10 +67,10 @@ def send_test_sms(passenger_name: str, target_number: str, center_name: str):
     api_secret = settings.solapi_api_secret
     sender_number = settings.solapi_sender
 
-    # 키가 없으면 조용히 건너뛴다. 문자 설정이 없다고 배차/일지가 멈추면 안 된다.
+    # 키가 없으면 건너뛴다. 문자 설정이 없다고 배차/일지가 멈추면 안 된다.
     if not (api_key and api_secret and sender_number):
         print("[문자 건너뜀] 솔라피 자격증명(SOLAPI_API_KEY/SECRET/SENDER)이 없습니다.")
-        return None
+        return (False, "서버에 솔라피 설정이 없어 발송하지 않았습니다.")
 
     # 번호가 없거나 형식이 아니면 발송하지 않는다.
     # 예전에는 발신번호(센터 번호)로 대체했는데, 보호자에게 전달된 것처럼
@@ -78,7 +78,7 @@ def send_test_sms(passenger_name: str, target_number: str, center_name: str):
     digits = "".join(ch for ch in (target_number or "") if ch.isdigit())
     if len(digits) < 10:
         print(f"[문자 건너뜀] {passenger_name} 어르신의 보호자 번호가 없습니다.")
-        return None
+        return (False, "보호자 연락처가 없어 발송하지 않았습니다.")
 
     url = "https://api.solapi.com/messages/v4/send"
     
@@ -112,7 +112,13 @@ def send_test_sms(passenger_name: str, target_number: str, center_name: str):
         response = client.post(url, json=payload, headers=headers)
     result = response.json()
     print(f"✉️ 문자 발송 리포트: {result}")
-    return result
+
+    # 솔라피는 접수 성공 시 messageId 와 statusCode 2000/3000 을 준다.
+    # 인증 실패 등은 200이 아닌 상태코드와 errorCode 로 온다.
+    if response.status_code == 200 and result.get("messageId"):
+        return (True, f"발송 접수됨 ({result.get('statusMessage', '').strip()})")
+    reason = result.get("errorMessage") or result.get("statusMessage") or response.text[:80]
+    return (False, f"솔라피 거절: {result.get('errorCode') or response.status_code} {reason}")
 
 def _archive_passengers(request: OptimizeRequest, resolved) -> None:
     """어르신 명단을 Supabase에 백업한다. 실패해도 배차 결과는 그대로 반환한다."""
@@ -138,9 +144,22 @@ def _archive_passengers(request: OptimizeRequest, resolved) -> None:
 
 
 @app.get("/api/health")
-def health() -> dict:
-    """Render의 헬스 체크와 폰에서의 연결 확인용."""
-    return {"status": "ok", "storage": "supabase"}
+def health(settings: Settings = Depends(get_settings)) -> dict:
+    """Render의 헬스 체크와 폰에서의 연결 확인용.
+
+    문자 설정 여부를 함께 알려준다. 값은 노출하지 않고 '있다/없다'와 길이만 준다.
+    배포 환경변수가 실제로 반영됐는지 밖에서 확인할 방법이 이것뿐이다.
+    """
+    return {
+        "status": "ok",
+        "storage": "supabase",
+        "sms": {
+            "api_key": bool(settings.solapi_api_key),
+            "api_secret": bool(settings.solapi_api_secret),
+            "secret_length": len(settings.solapi_api_secret or ""),
+            "sender": bool(settings.solapi_sender),
+        },
+    }
 
 
 @app.post("/api/driver-devices", response_model=DriverDeviceRecord)
@@ -224,15 +243,19 @@ def create_ride_completion(
     #    저장은 이미 끝났으므로 문자 실패로 500을 돌려주면 안 된다.
     #    그러면 기사님 화면에는 '저장 실패'가 뜨는데 실제로는 저장된 상태가 된다.
     try:
-        send_test_sms(
+        sms_sent, sms_message = send_test_sms(
             passenger_name=payload.passenger_name,
             target_number=payload.guardian_phone,
             center_name=payload.center_name,
         )
     except Exception as error:  # noqa: BLE001 - 문자 실패가 탑승 기록을 무효화하면 안 된다
         print(f"[문자 발송 실패] {payload.passenger_name}: {error}")
+        sms_sent, sms_message = False, f"발송 중 오류: {error}"
 
-    # 3. 프론트엔드로 성공 결과를 반환합니다.
+    # 3. 저장 결과와 문자 발송 결과를 함께 돌려준다.
+    #    문자 실패는 200을 유지하되 화면에서 알 수 있어야 한다.
+    record.sms_sent = sms_sent
+    record.sms_message = sms_message
     return record
 
 

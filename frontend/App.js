@@ -289,6 +289,15 @@ export default function App() {
         ...current,
         [completionKey]: record.completed_at,
       }));
+
+      // 문자 발송 결과를 기사님께 알린다.
+      // 전에는 발송이 실패해도 화면상 성공으로 보여, 보호자에게 갔다고 오해할 수 있었다.
+      if (record.sms_sent === false) {
+        Alert.alert(
+          '탑승 완료 (문자 미발송)',
+          `${stop.name} 어르신 기록은 저장했습니다.\n\n문자가 발송되지 않았습니다: ${record.sms_message || '사유 불명'}`,
+        );
+      }
     } catch (error) {
       Alert.alert('탑승 완료 저장 실패', error.message);
     } finally {

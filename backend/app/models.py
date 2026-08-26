@@ -188,6 +188,10 @@ class RideCompletionRecord(RideCompletionCreate):
     completed_at: str
     created_at: str
     updated_at: str
+    # 문자 발송 결과. DB에 저장하지 않고 응답에만 실린다.
+    # 이게 없으면 발송 실패가 서버 로그에만 남아 아무도 모른다.
+    sms_sent: bool | None = None
+    sms_message: str | None = None
 
 
 class RideCompletionList(BaseModel):
