@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -19,13 +20,14 @@ import {
 
 import {
   API_URL,
+  COMPLETION_POLL_MS,
+  fetchCompletedStopMap,
   fetchTodayCompletions,
   fetchTodayDispatch,
   getTodayCompletionExportUrl,
   notifyDispatch,
   optimizeRoutes,
   saveRideCompletion,
-  listenForRideCompletions,
 } from './src/api';
 import PassengerForm from './src/components/PassengerForm';
 import VehicleForm from './src/components/VehicleForm';
@@ -127,17 +129,47 @@ export default function App() {
     ).catch(() => {});
   }, [restored, vehicles, center, passengers, pairRules, result]);
 
+  // 다른 기사님이 탑승 완료를 누르면 관제 화면에도 반영되어야 한다.
+  // 수파베이스를 직접 구독하는 대신 백엔드를 주기적으로 물어본다.
+  // 관제 화면을 보고 있고 앱이 앞에 있을 때만 돈다. 배터리와 서버를 아낀다.
   useEffect(() => {
-    const channel = listenForRideCompletions((newRecord) => {
-      setCompletedStops((current) => ({
-        ...current,
-        [newRecord.passenger_id]: newRecord.completed_at,
-      }));
-    });
-    return () => {
-      if (channel) channel.unsubscribe();
+    if (screen !== 'results') return undefined;
+
+    let cancelled = false;
+    let timer = null;
+
+    const refresh = async () => {
+      try {
+        const map = await fetchCompletedStopMap();
+        if (!cancelled) setCompletedStops(map);
+      } catch (_) {
+        // 일시적인 통신 실패는 무시한다. 다음 주기에 다시 시도한다.
+      }
     };
-  }, []);
+
+    const start = () => {
+      if (timer) return;
+      refresh();
+      timer = setInterval(refresh, COMPLETION_POLL_MS);
+    };
+    const stop = () => {
+      clearInterval(timer);
+      timer = null;
+    };
+
+    start();
+    // 앱이 백그라운드로 가면 멈추고, 돌아오면 즉시 한 번 맞춘 뒤 재개한다.
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') start();
+      else stop();
+    });
+
+    return () => {
+      cancelled = true;
+      stop();
+      subscription.remove();
+    };
+  }, [screen]);
 
   const passengerCount = useMemo(
     () => passengers.filter(

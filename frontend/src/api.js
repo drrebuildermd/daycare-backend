@@ -1,5 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
-
 // 프론트엔드 -> 백엔드로 데이터를 쏘아 올리는 통신망 (api.js)
 export const API_URL = (
   process.env.EXPO_PUBLIC_API_URL || 'http://127.0.0.1:8000'
@@ -39,34 +37,21 @@ export const registerDriverDevice = (payload) => request('/api/driver-devices', 
 export const notifyDispatch = (result) => request('/api/dispatch/notify', { method: 'POST', body: JSON.stringify(result) });
 export const fetchTodayDispatch = () => request('/api/dispatch/today');
 
-// ==========================================
-// 📡 [신규 장착] 수파베이스 실시간 수신 안테나
-// ==========================================
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+// --- 실시간 갱신 ---
+//
+// 예전에는 여기서 수파베이스를 직접 구독했다. 그러려면 anon 키를 앱에 넣어야 하는데,
+// 그 키는 APK 를 뜯으면 누구나 꺼낼 수 있고 RLS 를 켜면 구독도 함께 막힌다.
+// 로그인이 없는 앱이라 "우리 앱만 허용"하는 정책을 만들 방법도 없다.
+//
+// 그래서 백엔드 경유 폴링으로 바꿨다. 앱에는 수파베이스 키가 아예 들어가지 않는다.
 
-export const supabase = (supabaseUrl && supabaseAnonKey)
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
+// 관제 화면을 보고 있는 동안만 이 간격으로 새로고침한다.
+export const COMPLETION_POLL_MS = 20000;
 
-// 탑승 완료 실시간 방송 수신 레이더 함수
-export const listenForRideCompletions = (onRecordAdded) => {
-  if (!supabase) {
-    console.warn('⚠️ 수파베이스 안테나가 없습니다. (.env 파일 확인 필요)');
-    return null;
-  }
-
-  const channel = supabase
-    .channel('public:ride_completions')
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'ride_completions' },
-      (payload) => {
-        // 기사님이 현장에서 탑승 완료를 누르는 순간 이 부분이 즉시 발동됩니다!
-        onRecordAdded(payload.new);
-      }
-    )
-    .subscribe();
-
-  return channel; // 앱이 꺼질 때 안테나를 접기 위해 반환
+/** 오늘의 탑승 완료를 { 어르신id: 완료시각 } 형태로 받아온다. */
+export const fetchCompletedStopMap = async () => {
+  const today = await fetchTodayCompletions();
+  return Object.fromEntries(
+    today.records.map((record) => [record.passenger_id, record.completed_at]),
+  );
 };
