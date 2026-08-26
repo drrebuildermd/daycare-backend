@@ -24,7 +24,7 @@ import uuid
 import httpx
 
 from app.config import get_settings
-from app.supabase_client import get_supabase
+from app.supabase_client import get_supabase, key_kind
 
 LIVE = "https://daycare-routing-api.onrender.com"
 SOLAPI = "https://api.solapi.com"
@@ -137,13 +137,22 @@ else:
 
 # ---------------------------------------------------------------------------
 print("\n=== 정리: 테스트로 남은 일지 행 삭제 ===")
-try:
-    get_supabase().table("ride_completions").delete().eq("passenger_id", TEST_ID).execute()
-    left = get_supabase().table("ride_completions").select("passenger_id") \
-        .like("passenger_id", "ZZ-%").execute().data
-    check("테스트 행 정리됨", len(left) == 0, f"잔여 {len(left)}건")
-except Exception as error:  # noqa: BLE001
-    check("테스트 행 정리", False, str(error))
+# RLS 를 켠 뒤로 공개용 키로는 삭제도 조회도 막힌다.
+# 그런데 조회가 빈 배열을 돌려주므로 '잔여 0건'이 되어 정리에 성공한 것처럼 보인다.
+# 키 등급을 먼저 확인해 그 거짓 통과를 막는다.
+local_key = key_kind(get_settings().supabase_key)
+if local_key != "secret":
+    print(f"  SKIP  로컬 SUPABASE_KEY 가 {local_key} 라 정리할 수 없습니다.")
+    print(f"        Supabase SQL Editor 에서 지워 주세요:")
+    print(f"          delete from public.ride_completions where passenger_id = '{TEST_ID}';")
+else:
+    try:
+        get_supabase().table("ride_completions").delete().eq("passenger_id", TEST_ID).execute()
+        left = get_supabase().table("ride_completions").select("passenger_id") \
+            .like("passenger_id", "ZZ-%").execute().data
+        check("테스트 행 정리됨", len(left) == 0, f"잔여 {len(left)}건")
+    except Exception as error:  # noqa: BLE001
+        check("테스트 행 정리", False, str(error))
 
 print()
 if failures:
