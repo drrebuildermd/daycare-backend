@@ -14,7 +14,7 @@ services:
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     # Render는 포트를 $PORT 로 넘겨준다. 하드코딩하면 헬스체크가 실패한다.
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     envVars:
       - key: PYTHON_VERSION
@@ -31,6 +31,15 @@ services:
       # 네이티브 앱 WebView가 여는 /map 페이지에 심는 카카오맵 자바스크립트 키.
       # Kakao Developers > 플랫폼 > Web 에 이 서버 주소를 등록해야 지도가 뜹니다.
       - key: KAKAO_JS_KEY
+        sync: false
+      # 탑승 완료 문자 발송용 솔라피 자격증명.
+      # 없으면 문자만 건너뛰고 나머지 기능은 정상 동작합니다.
+      - key: SOLAPI_API_KEY
+        sync: false
+      - key: SOLAPI_API_SECRET
+        sync: false
+      # 사전에 등록된 발신번호여야 합니다.
+      - key: SOLAPI_SENDER
         sync: false
       # 프론트엔드가 접속할 주소. 예: https://내앱.vercel.app,http://localhost:8081
       # "*" 로 두면 아무 사이트나 이 API를 호출할 수 있습니다.

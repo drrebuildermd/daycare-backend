@@ -17,6 +17,7 @@
     },
     "android": {
       "package": "com.daycare.routing",
+      "googleServicesFile": "./google-services.json",
       "versionCode": 1,
       "usesCleartextTraffic": true,
       "intentFilters": [

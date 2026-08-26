@@ -7,7 +7,7 @@ import sys
 
 from fastapi.testclient import TestClient
 
-import main
+import app.main as main
 
 CENTER = {
     "name": "행복주야간보호센터",

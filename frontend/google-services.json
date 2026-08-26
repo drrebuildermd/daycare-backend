@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "917327083914",
+    "project_id": "daycare-routing",
+    "storage_bucket": "daycare-routing.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:917327083914:android:9f4c580f8288f01bcd3073",
+        "android_client_info": {
+          "package_name": "com.daycare.routing"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCowOhnghp9Wc2eonyqzezUY0nJKMWQ5bQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

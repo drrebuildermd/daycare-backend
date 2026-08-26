@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { enablePushForDriver } from '../push';
+import { enablePushForDriver, getPushEnvironment } from '../push';
 
 /**
  * 기사님이 본인 폰을 알림 수신 기기로 등록하는 패널.
@@ -39,15 +39,19 @@ export default function DriverPushPanel({ vehicles }) {
     }
   };
 
-  if (Platform.OS === 'web') {
+  // 웹·시뮬레이터·Expo Go 등 푸시를 쓸 수 없는 환경이면 이유를 그대로 안내한다.
+  // (예외를 던지지 않는 함수이므로 여기서 안전하게 호출할 수 있다)
+  const environment = getPushEnvironment();
+  if (!environment.supported) {
     return (
       <View style={styles.card}>
         <Text style={styles.title}>📱 기사님 알림 설정</Text>
-        <Text style={styles.body}>
-          배차 알림은 기사님 휴대폰의 앱에서 켭니다.{'\n'}
-          기사님 폰에 앱을 설치한 뒤 [1. 차량 관리] 화면 아래에서
-          본인 이름을 눌러 주세요.
-        </Text>
+        <Text style={styles.body}>{environment.message}</Text>
+        {environment.reason === 'web' && (
+          <Text style={styles.hint}>
+            기사님 폰에 앱을 설치한 뒤 [1. 차량 관리] 화면 아래에서 본인 이름을 눌러 주세요.
+          </Text>
+        )}
       </View>
     );
   }
@@ -99,6 +103,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#E2E8F0' },
   title: { color: '#0F172A', fontSize: 15, fontWeight: '900' },
   body: { color: '#64748B', fontSize: 12.5, lineHeight: 19, marginTop: 5 },
+  hint: { color: '#0F766E', fontSize: 12, fontWeight: '700', marginTop: 8, lineHeight: 18 },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
   chip: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#0F766E', borderRadius: 999, paddingHorizontal: 15, paddingVertical: 10, minWidth: 110, alignItems: 'center' },
   chipDone: { backgroundColor: '#ECFDF5', borderColor: '#10B981' },

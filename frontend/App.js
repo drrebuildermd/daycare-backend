@@ -25,6 +25,7 @@ import {
   notifyDispatch,
   optimizeRoutes,
   saveRideCompletion,
+  listenForRideCompletions,
 } from './src/api';
 import PassengerForm from './src/components/PassengerForm';
 import VehicleForm from './src/components/VehicleForm';
@@ -45,6 +46,7 @@ const emptyPassenger = () => ({
   pickupStart: '08:00',
   pickupEnd: '08:30',
   wheelchair: false,
+  guardianPhone: '', // 🚨 [신규 장착] 보호자 연락처 저장 공간 확보
   latitude: '',
   longitude: '',
 });
@@ -76,9 +78,7 @@ export default function App() {
   const [isCenterAddressModalOpen, setIsCenterAddressModalOpen] = useState(false);
   const [pairRules, setPairRules] = useState([]);
   const [sending, setSending] = useState(false);
-  // 기사님이 알림을 눌러 들어온 경우, 본인 차량 동선만 보여주기 위한 값.
   const [focusVehicleId, setFocusVehicleId] = useState(null);
-  // 복원이 끝나기 전에 저장이 돌면 빈 초기값이 기존 명단을 덮어쓴다.
   const [restored, setRestored] = useState(false);
 
   useEffect(() => {
@@ -96,24 +96,18 @@ export default function App() {
             setScreen('results');
           }
         }
-      } catch (_) {
-        // A corrupt local cache must not block fresh dispatch work.
-      }
+      } catch (_) {}
       try {
         const today = await fetchTodayCompletions();
         setCompletedStops(Object.fromEntries(
           today.records.map((record) => [record.passenger_id, record.completed_at]),
         ));
-      } catch (_) {
-        // The API error is surfaced when the driver attempts a write/export.
-      }
+      } catch (_) {}
       setRestored(true);
     };
     restoreSession();
   }, []);
 
-  // 기사님이 배차 알림을 누르면 오늘의 배차를 내려받아 본인 차량 지도로 바로 들어간다.
-  // 기사님 폰에는 명단이 없으므로 서버에서 받아와야 한다.
   useEffect(() => listenForDispatchTaps(async (vehicleId) => {
     setFocusVehicleId(vehicleId);
     setScreen('results');
@@ -125,17 +119,25 @@ export default function App() {
     }
   }), []);
 
-  // 명단·차량·규칙은 바뀔 때마다 저장한다.
-  // 예전에는 배차를 눌러야만 저장돼서, 입력만 하고 앱을 닫으면 전부 날아갔다.
   useEffect(() => {
     if (!restored) return;
     AsyncStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({ vehicles, center, passengers, pairRules, result }),
-    ).catch(() => {
-      // 저장 실패는 조용히 넘긴다. 다음 변경 때 다시 시도된다.
-    });
+    ).catch(() => {});
   }, [restored, vehicles, center, passengers, pairRules, result]);
+
+  useEffect(() => {
+    const channel = listenForRideCompletions((newRecord) => {
+      setCompletedStops((current) => ({
+        ...current,
+        [newRecord.passenger_id]: newRecord.completed_at,
+      }));
+    });
+    return () => {
+      if (channel) channel.unsubscribe();
+    };
+  }, []);
 
   const passengerCount = useMemo(
     () => passengers.filter(
@@ -210,7 +212,6 @@ export default function App() {
         .filter((item) => item.name || item.address)
         .filter((item) => item.attending !== false);
       const activeIds = new Set(active.map((item) => item.id));
-      // 결석·삭제된 어르신을 가리키는 규칙을 그대로 보내면 백엔드가 422로 거절한다.
       const liveRules = pairRules.filter(
         (rule) => rule.passengerIds.every((id) => activeIds.has(id)),
       );
@@ -233,6 +234,7 @@ export default function App() {
           pickup_start: item.pickupStart,
           pickup_end: item.pickupEnd,
           wheelchair: item.wheelchair,
+          guardian_phone: (item.guardianPhone || '').trim(), // 🚨 [신규 장착] 최적화 시에도 정보 보존
         })),
         forbidden_pairs: liveRules.filter((rule) => rule.kind === 'forbidden').map(asRule),
         required_pairs: liveRules.filter((rule) => rule.kind === 'required').map(asRule),
@@ -244,9 +246,7 @@ export default function App() {
         setCompletedStops(Object.fromEntries(
           today.records.map((record) => [record.passenger_id, record.completed_at]),
         ));
-      } catch (_) {
-        // The route is still valid even if completion history refresh is unavailable.
-      }
+      } catch (_) {}
       try {
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({
           vehicles,
@@ -269,6 +269,10 @@ export default function App() {
     const completionKey = stop.passenger_id;
     setSavingStops((current) => ({ ...current, [completionKey]: true }));
     try {
+      // 보호자 번호는 배차 결과에 실려 온다.
+      // 로컬 명단(passengers)에서 찾으면 기사님 폰에서는 명단이 없어 항상 빈 값이 된다.
+      const phone = stop.guardian_phone || '';
+
       const record = await saveRideCompletion({
         passenger_id: stop.passenger_id,
         passenger_name: stop.name,
@@ -277,7 +281,10 @@ export default function App() {
         vehicle_plate_number: vehicle.plate_number,
         trip_round: tripRound,
         scheduled_pickup: stop.estimated_pickup,
+        center_name: center.name,       // 🚨 [신규 장착] 센터명 백엔드로 발사!
+        guardian_phone: phone           // 🚨 [신규 장착] 보호자 번호 백엔드로 발사!
       });
+      
       setCompletedStops((current) => ({
         ...current,
         [completionKey]: record.completed_at,
@@ -302,7 +309,7 @@ export default function App() {
         (item) => `· ${item.vehicle_label}: ${item.message}`,
       );
       Alert.alert(
-        outcome.sent ? `📤 ${outcome.sent}대 발송 완료` : '발송된 알림이 없습니다',
+        outcome.sent > 0 ? `🚨 ${outcome.sent}대 발송 완료` : '발송된 알림이 없습니다',
         lines.join('\n') || '전송할 차량이 없습니다.',
       );
     } catch (error) {
@@ -381,7 +388,6 @@ export default function App() {
                 <Text style={styles.inputLabel}>센터명</Text>
                 <TextInput style={styles.input} value={center.name} onChangeText={(text) => setCenter({ ...center, name: text })} placeholder="센터명" />
                 <Text style={styles.inputLabel}>센터 주소</Text>
-                {/* 📍 센터 주소 전용 초록색 검색 버튼 */}
                 <TouchableOpacity
                   style={{ backgroundColor: '#0f766e', padding: 12, borderRadius: 8, marginTop: 5, marginBottom: 8 }}
                   onPress={() => setIsCenterAddressModalOpen(true)}
@@ -393,7 +399,6 @@ export default function App() {
 
                 <TextInput style={styles.input} value={center.address} onChangeText={(text) => setCenter({ ...center, address: text })} placeholder="도로명 주소" />
               </View>
-              {/* 우편번호 검색 팝업창 (센터 주소 전용) */}
               <AddressSearch
                 visible={isCenterAddressModalOpen}
                 onSelected={(address) => {

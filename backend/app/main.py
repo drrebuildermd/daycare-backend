@@ -1,5 +1,11 @@
 import csv
 import io
+import time
+import uuid
+import hmac
+import hashlib
+
+import httpx
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
@@ -52,6 +58,61 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ==========================================
+# 🚨 [최종 장착] 1급 기밀(.env) 연동 진짜 보호자 번호 발사 헬퍼 함수
+# ==========================================
+def send_test_sms(passenger_name: str, target_number: str, center_name: str):
+    settings = get_settings()
+    api_key = settings.solapi_api_key
+    api_secret = settings.solapi_api_secret
+    sender_number = settings.solapi_sender
+
+    # 키가 없으면 조용히 건너뛴다. 문자 설정이 없다고 배차/일지가 멈추면 안 된다.
+    if not (api_key and api_secret and sender_number):
+        print("[문자 건너뜀] 솔라피 자격증명(SOLAPI_API_KEY/SECRET/SENDER)이 없습니다.")
+        return None
+
+    # 번호가 없거나 형식이 아니면 발송하지 않는다.
+    # 예전에는 발신번호(센터 번호)로 대체했는데, 보호자에게 전달된 것처럼
+    # 보이면서 실제로는 센터 자기 폰으로만 가는 상태였다.
+    digits = "".join(ch for ch in (target_number or "") if ch.isdigit())
+    if len(digits) < 10:
+        print(f"[문자 건너뜀] {passenger_name} 어르신의 보호자 번호가 없습니다.")
+        return None
+
+    url = "https://api.solapi.com/messages/v4/send"
+    
+    date = time.strftime('%Y-%m-%dT%H:%M:%S%z')
+    salt = str(uuid.uuid1().hex)
+    data = date + salt
+    
+    signature = hmac.new(
+        api_secret.encode('utf-8'),
+        data.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+    
+    auth_header = f"HMAC-SHA256 apiKey={api_key}, date={date}, salt={salt}, signature={signature}"
+    
+    payload = {
+        "message": {
+            "to": digits,
+            "from": sender_number.replace("-", "").strip(),
+            "text": f"[{center_name or '주야간보호센터'}] {passenger_name} 어르신이 무사히 차량에 탑승하셨습니다.",
+            "type": "SMS"
+        }
+    }
+    
+    headers = {
+        "Authorization": auth_header,
+        "Content-Type": "application/json"
+    }
+    
+    with httpx.Client(timeout=10.0) as client:
+        response = client.post(url, json=payload, headers=headers)
+    result = response.json()
+    print(f"✉️ 문자 발송 리포트: {result}")
+    return result
 
 def _archive_passengers(request: OptimizeRequest, resolved) -> None:
     """어르신 명단을 Supabase에 백업한다. 실패해도 배차 결과는 그대로 반환한다."""
@@ -123,7 +184,8 @@ def map_page(settings: Settings = Depends(get_settings)) -> HTMLResponse:
     카카오맵 자바스크립트 키가 요청 도메인을 검사하기 때문이다.
     이 서버 주소를 Kakao Developers > 플랫폼 > Web 에 등록하면 된다.
     """
-    html = (Path(__file__).parent / "static" / "map.html").read_text(encoding="utf-8")
+    static_dir = Path(__file__).resolve().parents[1] / "static"
+    html = (static_dir / "map.html").read_text(encoding="utf-8")
     html = html.replace("__KAKAO_JS_KEY__", settings.kakao_js_key or "")
     return HTMLResponse(content=html)
 
@@ -155,7 +217,23 @@ async def run_optimization(
 def create_ride_completion(
     payload: RideCompletionCreate, settings: Settings = Depends(get_settings)
 ) -> RideCompletionRecord:
-    return upsert_completion(payload, settings)
+    # 1. 수파베이스(DB)에 탑승 기록을 먼저 저장합니다.
+    record = upsert_completion(payload, settings)
+
+    # 2. 보호자에게 탑승 완료 문자를 보냅니다.
+    #    저장은 이미 끝났으므로 문자 실패로 500을 돌려주면 안 된다.
+    #    그러면 기사님 화면에는 '저장 실패'가 뜨는데 실제로는 저장된 상태가 된다.
+    try:
+        send_test_sms(
+            passenger_name=payload.passenger_name,
+            target_number=payload.guardian_phone,
+            center_name=payload.center_name,
+        )
+    except Exception as error:  # noqa: BLE001 - 문자 실패가 탑승 기록을 무효화하면 안 된다
+        print(f"[문자 발송 실패] {payload.passenger_name}: {error}")
+
+    # 3. 프론트엔드로 성공 결과를 반환합니다.
+    return record
 
 
 @app.get("/api/ride-completions/today", response_model=RideCompletionList)

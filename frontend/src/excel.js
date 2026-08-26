@@ -12,6 +12,7 @@ const COLUMN_ALIASES = {
   pickupStart: ['pickup_start', '픽업 하한', '픽업시간 하한', '시작시간', '하한'],
   pickupEnd: ['pickup_end', '픽업 상한', '픽업시간 상한', '종료시간', '상한'],
   wheelchair: ['wheelchair', '휠체어', '휠체어 여부'],
+  guardianPhone: ['guardian_phone', '보호자 연락처', '보호자연락처', '연락처', '전화번호', '휴대폰'], // 🚨 [신규 장착] 엑셀에서 연락처 열 추출
   latitude: ['latitude', 'lat', '위도'],
   longitude: ['longitude', 'lng', 'lon', '경도'],
 };
@@ -62,6 +63,7 @@ export async function pickPassengerExcel() {
       pickupStart: excelTime(getValue(row, COLUMN_ALIASES.pickupStart)),
       pickupEnd: excelTime(getValue(row, COLUMN_ALIASES.pickupEnd)),
       wheelchair: asBoolean(getValue(row, COLUMN_ALIASES.wheelchair)),
+      guardianPhone: String(getValue(row, COLUMN_ALIASES.guardianPhone) ?? '').trim(), // 🚨 [신규 장착] 연락처 데이터 연결
       latitude: String(getValue(row, COLUMN_ALIASES.latitude) ?? '').trim(),
       longitude: String(getValue(row, COLUMN_ALIASES.longitude) ?? '').trim(),
     }))
@@ -72,4 +74,3 @@ export async function pickPassengerExcel() {
   }
   return { passengers, fileName: asset.name };
 }
-

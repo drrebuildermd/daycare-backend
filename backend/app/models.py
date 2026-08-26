@@ -46,6 +46,7 @@ class PassengerInput(LocationInput):
     pickup_start: str
     pickup_end: str
     wheelchair: bool = False
+    guardian_phone: str | None = Field(default=None, max_length=20) # 🚨 [신규 장착] 최적화 시 연락처 보존
 
     @field_validator("pickup_start", "pickup_end")
     @classmethod
@@ -116,6 +117,9 @@ class StopResult(BaseModel):
     name: str
     address: str
     detail_address: str | None = None
+    # 탑승 완료 문자를 보낼 번호. 기사님 폰에는 어르신 명단이 없으므로
+    # 배차 결과에 실어 보내야 한다.
+    guardian_phone: str | None = None
     latitude: float
     longitude: float
     wheelchair: bool
@@ -169,6 +173,8 @@ class RideCompletionCreate(BaseModel):
     vehicle_plate_number: str = Field(min_length=1, max_length=30)
     trip_round: int = Field(ge=1, le=2)
     scheduled_pickup: str
+    center_name: str | None = None      # 🚨 [신규 장착] 발송용 센터명
+    guardian_phone: str | None = None   # 🚨 [신규 장착] 발송용 보호자 번호
 
     @field_validator("scheduled_pickup")
     @classmethod
@@ -198,8 +204,6 @@ class DriverDeviceCreate(BaseModel):
     @classmethod
     def looks_like_expo_token(cls, value: str) -> str:
         token = value.strip()
-        # Expo가 발급하는 토큰은 ExponentPushToken[...] 또는 ExpoPushToken[...] 형태다.
-        # 형식이 아니면 발송 시점에야 실패하므로 등록 단계에서 걸러낸다.
         if not (
             token.startswith(("ExponentPushToken[", "ExpoPushToken["))
             and token.endswith("]")
@@ -222,8 +226,6 @@ class DriverDeviceList(BaseModel):
 
 
 class DriverNotifyOutcome(BaseModel):
-    """차량 한 대에 대한 발송 결과. 관리자 화면에 그대로 보여준다."""
-
     vehicle_label: str
     driver_name: str | None = None
     sent: int = 0

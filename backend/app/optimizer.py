@@ -323,6 +323,7 @@ def optimize_routes(
                             name=passenger.name,
                             address=passenger.address,
                             detail_address=passenger.detail_address,
+                            guardian_phone=passenger.guardian_phone,
                             latitude=location.latitude,
                             longitude=location.longitude,
                             wheelchair=passenger.wheelchair,

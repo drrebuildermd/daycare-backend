@@ -27,7 +27,7 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
   // 명단에는 남기고 배차에서만 빼기 위한 값. 기존 데이터에는 없으므로 기본을 출석으로 본다.
   const attending = value.attending !== false;
 
-const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
+  const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
 
   return (
     <View style={[styles.card, !attending && styles.absentCard]}>
@@ -58,44 +58,54 @@ const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
         />
       </View>
       <Field label="어르신 이름" value={value.name} onChangeText={(text) => set('name', text)} placeholder="홍길동" />
-      {/* 개조된 주소 검색 영역 */}
-          <View style={{ marginBottom: 15 }}>
-            <Text style={styles.label}>주소</Text>
-            <TouchableOpacity 
-              style={{ backgroundColor: '#0f766e', padding: 12, borderRadius: 8, marginTop: 5 }}
-              onPress={() => setIsAddressModalOpen(true)}
-            >
-              <Text style={{ color: 'white', textAlign: 'center', fontWeight: 'bold' }}>
-                📍 {value.address ? "주소 다시 검색하기" : "정확한 주소 찾기"}
-              </Text>
-            </TouchableOpacity>
-            
-           {/* 검색 완료된 주소가 표시되는 곳 */}
-            {value.address ? (
-              <View>
-                <Text style={{ marginTop: 8, marginBottom: 8, color: '#374151', fontSize: 15, padding: 5, backgroundColor: '#f3f4f6' }}>
-                  {value.address}
-                </Text>
-                {/* 🎯 상세 주소 입력칸 추가 */}
-                <Field 
-                  label="상세 주소" 
-                  value={value.detailAddress} 
-                  onChangeText={(text) => set('detailAddress', text)} 
-                  placeholder="예: 101동 202호 (선택)" 
-                />
-              </View>
-            ) : null}
-          </View>
+      
+      {/* 🚨 [신규 장착] 보호자 연락처 입력칸 추가 */}
+      <Field 
+        label="보호자 연락처" 
+        value={value.guardianPhone} 
+        onChangeText={(text) => set('guardianPhone', text)} 
+        placeholder="010-1234-5678 (숫자만 입력 가능)" 
+        keyboardType="phone-pad" 
+      />
 
-          {/* 우편번호 검색 팝업창 */}
-          <AddressSearch
-            visible={isAddressModalOpen}
-            onSelected={(address) => {
-              set('address', address); // 도로명 주소를 꽂아넣음
-              setIsAddressModalOpen(false); // 선택 즉시 팝업 닫기
-            }}
-            onClose={() => setIsAddressModalOpen(false)}
-          />
+      {/* 개조된 주소 검색 영역 */}
+      <View style={{ marginBottom: 15 }}>
+        <Text style={styles.label}>주소</Text>
+        <TouchableOpacity 
+          style={{ backgroundColor: '#0f766e', padding: 12, borderRadius: 8, marginTop: 5 }}
+          onPress={() => setIsAddressModalOpen(true)}
+        >
+          <Text style={{ color: 'white', textAlign: 'center', fontWeight: 'bold' }}>
+            📍 {value.address ? "주소 다시 검색하기" : "정확한 주소 찾기"}
+          </Text>
+        </TouchableOpacity>
+        
+        {/* 검색 완료된 주소가 표시되는 곳 */}
+        {value.address ? (
+          <View>
+            <Text style={{ marginTop: 8, marginBottom: 8, color: '#374151', fontSize: 15, padding: 5, backgroundColor: '#f3f4f6' }}>
+              {value.address}
+            </Text>
+            {/* 🎯 상세 주소 입력칸 추가 */}
+            <Field 
+              label="상세 주소" 
+              value={value.detailAddress} 
+              onChangeText={(text) => set('detailAddress', text)} 
+              placeholder="예: 101동 202호 (선택)" 
+            />
+          </View>
+        ) : null}
+      </View>
+
+      {/* 우편번호 검색 팝업창 */}
+      <AddressSearch
+        visible={isAddressModalOpen}
+        onSelected={(address) => {
+          set('address', address); // 도로명 주소를 꽂아넣음
+          setIsAddressModalOpen(false); // 선택 즉시 팝업 닫기
+        }}
+        onClose={() => setIsAddressModalOpen(false)}
+      />
       
       <View style={styles.timeRow}>
         <View style={styles.timeField}>
@@ -144,4 +154,3 @@ const styles = StyleSheet.create({
   switchTitle: { color: '#1E293B', fontWeight: '700' },
   switchCaption: { color: '#94A3B8', fontSize: 12, marginTop: 2 },
 });
-
