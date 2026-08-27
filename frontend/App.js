@@ -35,6 +35,9 @@ import VehicleResults from './src/components/VehicleResults';
 import { pickPassengerExcel } from './src/excel';
 import AddressSearch from './src/components/AddressSearch';
 import PairRuleEditor from './src/components/PairRuleEditor';
+import SummaryBar from './src/components/SummaryBar';
+import ModeGate from './src/screens/ModeGate';
+import DriverScreen from './src/screens/DriverScreen';
 import DriverPushPanel from './src/components/DriverPushPanel';
 import { listenForDispatchTaps } from './src/push';
 
@@ -64,6 +67,8 @@ const emptyVehicle = () => ({
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const STORAGE_KEY = 'daycare-routing:last-session:v1';
+// 기사님 폰은 한 번 고르면 계속 기사 화면으로 열려야 한다.
+const MODE_KEY = 'daycare-routing:mode:v1';
 
 export default function App() {
   const [screen, setScreen] = useState('vehicles');
@@ -82,6 +87,8 @@ export default function App() {
   const [sending, setSending] = useState(false);
   const [focusVehicleId, setFocusVehicleId] = useState(null);
   const [restored, setRestored] = useState(false);
+  // null = 아직 모름(로딩), 'gate' = 선택 화면, 'admin' | 'driver'
+  const [mode, setMode] = useState(null);
 
   useEffect(() => {
     const restoreSession = async () => {
@@ -105,6 +112,12 @@ export default function App() {
           today.records.map((record) => [record.passenger_id, record.completed_at]),
         ));
       } catch (_) {}
+      try {
+        const savedMode = await AsyncStorage.getItem(MODE_KEY);
+        setMode(savedMode === 'admin' || savedMode === 'driver' ? savedMode : 'gate');
+      } catch (_) {
+        setMode('gate');
+      }
       setRestored(true);
     };
     restoreSession();
@@ -368,6 +381,45 @@ export default function App() {
     }
   };
 
+  const chooseMode = (next) => {
+    setMode(next);
+    AsyncStorage.setItem(MODE_KEY, next).catch(() => {});
+  };
+  const leaveMode = () => {
+    setMode('gate');
+    AsyncStorage.removeItem(MODE_KEY).catch(() => {});
+  };
+
+  // 저장소에서 모드를 읽기 전에는 아무것도 그리지 않는다.
+  // 잠깐이라도 관리자 화면이 스쳐 보이면 기사님이 혼란스럽다.
+  if (mode === null) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.bootScreen}>
+          <ActivityIndicator size="large" color="#0F766E" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (mode === 'gate') {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="dark-content" backgroundColor="#F1F5F9" />
+        <ModeGate onSelect={chooseMode} />
+      </SafeAreaView>
+    );
+  }
+
+  if (mode === 'driver') {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor="#0F766E" />
+        <DriverScreen onExit={leaveMode} />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#F1F5F9" />
@@ -377,8 +429,13 @@ export default function App() {
             <Text style={styles.eyebrow}>DAYCARE ROUTING</Text>
             <Text style={styles.appTitle}>송영 최적화</Text>
           </View>
-          <View style={styles.statusPill}><View style={styles.statusDot} /><Text style={styles.statusText}>API {API_URL.replace(/^https?:\/\//, '')}</Text></View>
+          <Pressable style={styles.statusPill} onPress={leaveMode}>
+            <View style={styles.statusDot} />
+            <Text style={styles.statusText}>관리자 모드 · 탭하여 변경</Text>
+          </Pressable>
         </View>
+
+        <SummaryBar vehicles={vehicles} passengers={passengers} />
 
         <View style={styles.tabs}>
           <Pressable style={[styles.tab, screen === 'vehicles' && styles.activeTab]} onPress={() => setScreen('vehicles')}>
@@ -532,6 +589,7 @@ export default function App() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: '#F1F5F9' },
+  bootScreen: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   topBar: { paddingHorizontal: 18, paddingTop: 14, paddingBottom: 11, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   eyebrow: { color: '#0F766E', fontSize: 10, fontWeight: '900', letterSpacing: 1.4 },
   appTitle: { color: '#0F172A', fontSize: 24, fontWeight: '900', marginTop: 1 },

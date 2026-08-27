@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Pressable,
   StyleSheet,
   Switch,
   Text,
@@ -10,6 +9,7 @@ import {
 } from 'react-native';
 
 import AddressSearch from './AddressSearch';
+import Accordion from './Accordion';
 
 const Field = ({ label, ...props }) => (
   <View style={styles.field}>
@@ -31,18 +31,22 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
 
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
 
-  return (
-    <View style={[styles.card, !attending && styles.absentCard]}>
-      <View style={styles.header}>
-        <View style={styles.numberBadge}><Text style={styles.number}>{index + 1}</Text></View>
-        <Text style={[styles.title, !attending && styles.absentTitle]}>
-          {value.name || `어르신 ${index + 1}`}
-        </Text>
-        <Pressable onPress={onRemove} hitSlop={10}>
-          <Text style={styles.remove}>삭제</Text>
-        </Pressable>
-      </View>
+  // 접힌 줄만 보고도 무엇이 저장돼 있는지, 무엇이 빠졌는지 알 수 있어야 한다.
+  const displayName = (value.name || '').trim() || `어르신 ${index + 1}`;
+  const summary = hasGuardianPhone
+    ? `보호자 ${(value.guardianPhone || '').trim()}`
+    : '보호자 연락처 없음';
 
+  return (
+    <Accordion
+      index={index}
+      title={displayName}
+      summary={summary}
+      badge={attending ? (hasGuardianPhone ? '출석' : '연락처 없음') : '결석'}
+      badgeTone={attending ? (hasGuardianPhone ? 'success' : 'warning') : 'default'}
+      tone={attending ? 'default' : 'muted'}
+      onRemove={onRemove}
+    >
       <View style={styles.attendanceRow}>
         <View>
           <Text style={[styles.attendanceLabel, !attending && styles.absentLabel]}>
@@ -135,22 +139,14 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
           thumbColor={value.wheelchair ? '#059669' : '#F8FAFC'}
         />
       </View>
-    </View>
+    </Accordion>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: '#E2E8F0' },
-  absentCard: { backgroundColor: '#F8FAFC', borderColor: '#CBD5E1', opacity: 0.75 },
-  absentTitle: { color: '#94A3B8', textDecorationLine: 'line-through' },
   attendanceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 12, padding: 12, marginBottom: 14 },
   attendanceLabel: { color: '#047857', fontWeight: '800', fontSize: 14 },
   absentLabel: { color: '#64748B' },
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
-  numberBadge: { width: 28, height: 28, borderRadius: 9, backgroundColor: '#E0F2FE', alignItems: 'center', justifyContent: 'center', marginRight: 9 },
-  number: { color: '#0369A1', fontWeight: '800' },
-  title: { flex: 1, color: '#0F172A', fontSize: 16, fontWeight: '800' },
-  remove: { color: '#DC2626', fontWeight: '700', fontSize: 13 },
   field: { marginBottom: 12 },
   label: { color: '#475569', fontWeight: '700', fontSize: 13, marginBottom: 6 },
   phoneWarning: { color: '#B45309', fontSize: 12, fontWeight: '700', marginTop: -6, marginBottom: 12, lineHeight: 17 },

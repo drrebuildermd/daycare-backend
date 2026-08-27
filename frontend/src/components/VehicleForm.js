@@ -1,5 +1,7 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
+
+import Accordion from './Accordion';
 
 const Field = ({ label, ...props }) => (
   <View style={styles.field}>
@@ -11,16 +13,22 @@ const Field = ({ label, ...props }) => (
 export default function VehicleForm({ value, index, onChange, onRemove }) {
   const set = (field, nextValue) => onChange({ ...value, [field]: nextValue });
 
+  const plate = (value.plateNumber || '').trim();
+  const driver = (value.driverName || '').trim();
+  // 접혔을 때 보이는 한 줄. 여기만 봐도 무엇이 저장돼 있는지 알 수 있어야 한다.
+  const summary = [
+    plate || '차량번호 미입력',
+    driver ? `(담당: ${driver})` : '(담당 미지정)',
+  ].join(' ');
+
   return (
-    <View style={styles.card}>
-      <View style={styles.header}>
-        <View style={styles.numberBadge}><Text style={styles.number}>{index + 1}</Text></View>
-        <Text style={styles.title}>
-          {value.vehicleType || `차량 ${index + 1}`}
-          {!!value.driverName && <Text style={styles.driverTag}> · {value.driverName} 선생님</Text>}
-        </Text>
-        <Pressable onPress={onRemove} hitSlop={10}><Text style={styles.remove}>삭제</Text></Pressable>
-      </View>
+    <Accordion
+      index={index}
+      title={`[${(value.vehicleType || '').trim() || '차종 미입력'}]`}
+      summary={summary}
+      badge={value.capacity ? `${value.capacity}인승` : null}
+      onRemove={onRemove}
+    >
       <Field
         label="차종"
         value={value.vehicleType}
@@ -48,17 +56,11 @@ export default function VehicleForm({ value, index, onChange, onRemove }) {
         keyboardType="number-pad"
         maxLength={3}
       />
-    </View>
+    </Accordion>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: '#E2E8F0' },
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
-  numberBadge: { width: 28, height: 28, borderRadius: 9, backgroundColor: '#DCFCE7', alignItems: 'center', justifyContent: 'center', marginRight: 9 },
-  number: { color: '#15803D', fontWeight: '900' },
-  title: { flex: 1, color: '#0F172A', fontSize: 16, fontWeight: '900' },
-  remove: { color: '#DC2626', fontWeight: '700', fontSize: 13 },
   driverTag: { color: '#0F766E', fontSize: 13, fontWeight: '700' },
   field: { marginBottom: 12 },
   label: { color: '#475569', fontWeight: '700', fontSize: 13, marginBottom: 6 },
