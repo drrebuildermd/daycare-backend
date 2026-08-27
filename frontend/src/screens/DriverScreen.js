@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 
 import { fetchCompletedStopMap, fetchTodayDispatch, saveRideCompletion } from '../api';
+import { startNavigation } from '../navigation';
 import Accordion from '../components/Accordion';
 import RouteMap from '../components/RouteMap';
 
@@ -100,13 +101,7 @@ export default function DriverScreen({ onExit }) {
     }
   };
 
-  const openNavigation = async (stop) => {
-    try {
-      await Linking.openURL(stop.kakao_navi_url);
-    } catch (_) {
-      Alert.alert('내비 실행 실패', '카카오내비가 설치되어 있는지 확인해 주세요.');
-    }
-  };
+  const openNavigation = (stop) => startNavigation(stop);
 
   const callGuardian = async (stop) => {
     const digits = (stop.guardian_phone || '').replace(/[^0-9]/g, '');
@@ -156,8 +151,9 @@ export default function DriverScreen({ onExit }) {
     return (
       <View style={styles.screen}>
         <View style={styles.topBar}>
-          <Text style={styles.topTitle}>기사님 화면</Text>
-          <Pressable onPress={onExit} hitSlop={10}>
+          {/* 제목이 남는 공간을 다 먹어야 버튼이 오른쪽 끝으로 밀린다. */}
+          <Text style={[styles.topTitle, { flex: 1 }]}>기사님 화면</Text>
+          <Pressable onPress={onExit} hitSlop={12} style={styles.topActionButton}>
             <Text style={styles.topAction}>모드 변경</Text>
           </Pressable>
         </View>
@@ -213,7 +209,7 @@ export default function DriverScreen({ onExit }) {
             {vehicle.driver_name ? ` · ${vehicle.driver_name} 선생님` : ''}
           </Text>
         </View>
-        <Pressable onPress={() => setVehicleId(null)} hitSlop={10}>
+        <Pressable onPress={() => setVehicleId(null)} hitSlop={12} style={styles.topActionButton}>
           <Text style={styles.topAction}>차량 변경</Text>
         </Pressable>
       </View>
@@ -321,10 +317,11 @@ const styles = StyleSheet.create({
   elapsed: { color: '#0F766E', fontSize: 15, fontWeight: '900' },
   errorText: { color: '#B91C1C', fontSize: 15, fontWeight: '700', textAlign: 'center', lineHeight: 22 },
 
-  topBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingTop: 16, paddingBottom: 14, backgroundColor: '#0F766E' },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 14, backgroundColor: '#0F766E' },
+  topActionButton: { backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
   topTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '900' },
   topSub: { color: '#A7F3D0', fontSize: 13, fontWeight: '700', marginTop: 3 },
-  topAction: { color: '#FFFFFF', fontSize: 13, fontWeight: '800', textDecorationLine: 'underline' },
+  topAction: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
 
   pickBody: { padding: 18, gap: 12 },
   pickHeading: { color: '#0F172A', fontSize: 18, fontWeight: '900', marginBottom: 4 },

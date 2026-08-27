@@ -1,15 +1,8 @@
 import React from 'react';
-import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import RouteMap from './RouteMap';
-
-async function launchNavigation(stop) {
-  try {
-    await Linking.openURL(stop.kakao_navi_url);
-  } catch (_) {
-    Alert.alert('카카오내비 실행 실패', '카카오내비가 설치되어 있는지 확인해 주세요.');
-  }
-}
+import { startNavigation } from '../navigation';
 
 function formatCompletionTime(value) {
   const parsed = new Date(value);
@@ -63,7 +56,7 @@ const Trip = ({ trip, vehicle, completedStops, savingStops, onComplete }) => (
         <View style={styles.actionColumn}>
           <Pressable
             style={[styles.singleNaviButton, completedAt && styles.disabledAction]}
-            onPress={() => launchNavigation(stop)}
+            onPress={() => startNavigation(stop)}
             disabled={Boolean(completedAt)}
           >
             <Text style={styles.singleNaviText}>🚀 내비</Text>

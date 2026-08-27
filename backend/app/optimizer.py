@@ -126,17 +126,21 @@ def _matrices(
 
 
 def _kakao_navi_url(destination: ResolvedLocation) -> str:
-    params = {
-        "destination": {
-            "name": destination.name,
-            "x": str(destination.longitude),
-            "y": str(destination.latitude),
-        },
-        "option": {"coordType": "wgs84", "rpOption": "RECOMMENDED"},
-    }
-    import json
+    """길안내 딥링크.
 
-    return f"kakaonavi://navigate?params={quote(json.dumps(params, ensure_ascii=False))}"
+    예전에는 kakaonavi://navigate?params={JSON} 을 만들었는데, 그 형식은
+    카카오내비 SDK 용이라 딥링크로 직접 부르면 네이티브 앱 키를 요구한다.
+    키가 없어 기기에서 "필수 파라미터가 존재하지 않습니다" 오류가 났다.
+
+    키가 필요 없는 카카오맵 길찾기 스킴으로 바꿨다. 출발지를 비우면
+    현재 위치에서 자동차 길안내가 시작된다.
+
+    앱은 이 값을 쓰지 않고 좌표로 직접 링크를 만든다(navigation.js).
+    이미 저장된 배차에도 즉시 적용되게 하기 위해서다. 이 필드는 호환용이다.
+    """
+    return (
+        f"kakaomap://route?ep={destination.latitude},{destination.longitude}&by=CAR"
+    )
 
 
 def optimize_routes(
