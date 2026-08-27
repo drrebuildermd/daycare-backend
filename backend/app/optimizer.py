@@ -27,6 +27,8 @@ class VehicleSpec:
     plate_number: str
     driver_name: str | None
     capacity: int
+    # 1회차 출발 노드. 0 이면 센터, 그 외는 자차 출발지 노드.
+    start_node: int = 0
 
 
 def _required_groups(
@@ -150,16 +152,26 @@ def optimize_routes(
 ) -> OptimizeResponse:
     started = time.perf_counter()
     passenger_count = len(request.passengers)
-    vehicles = [
-        VehicleSpec(
-            vehicle_id=vehicle.id or f"vehicle-{index + 1}",
-            vehicle_type=vehicle.vehicle_type,
-            plate_number=vehicle.plate_number,
-            driver_name=vehicle.driver_name,
-            capacity=vehicle.capacity,
+    # 자차 출발지는 어르신 노드 뒤에 순서대로 붙어 있다.
+    # main.py 가 [센터, *어르신, *커스텀출발지] 순으로 지오코딩해 넘긴다.
+    next_start_node = 1 + passenger_count
+    vehicles = []
+    for index, vehicle in enumerate(request.vehicles):
+        if vehicle.start_type == "custom":
+            start_node = next_start_node
+            next_start_node += 1
+        else:
+            start_node = 0
+        vehicles.append(
+            VehicleSpec(
+                vehicle_id=vehicle.id or f"vehicle-{index + 1}",
+                vehicle_type=vehicle.vehicle_type,
+                plate_number=vehicle.plate_number,
+                driver_name=vehicle.driver_name,
+                capacity=vehicle.capacity,
+                start_node=start_node,
+            )
         )
-        for index, vehicle in enumerate(request.vehicles)
-    ]
     # 규칙을 노드 번호로 옮기려면 어르신마다 확정된 id가 필요하다.
     # StopResult가 쓰는 것과 같은 규칙으로 만든다.
     passenger_ids = [
@@ -186,11 +198,23 @@ def optimize_routes(
             detail=f"탑승 인원 {passenger_count}명은 2회 운행 최대 수용 인원 {max_capacity}명을 초과합니다.",
         )
 
-    # Node 0 is the center. Two routing vehicles per physical vehicle represent
-    # first and second runs; solver constraints link each pair chronologically.
+    # 노드 0은 센터, 1..n은 어르신, 그 뒤는 자차 출발지.
+    # 물리 차량 한 대당 두 개의 라우팅 차량(1·2회차)을 만들고,
+    # 아래 제약으로 두 회차를 시간 순으로 묶는다.
     distance_m, travel_minutes = _matrices(resolved, settings)
     trip_specs = [(vehicle, round_number) for vehicle in vehicles for round_number in (1, 2)]
-    manager = pywrapcp.RoutingIndexManager(len(resolved), len(trip_specs), 0)
+
+    # 자차 출발은 1회차에만 적용한다. 2회차는 이미 센터에 돌아와 있으므로
+    # 센터에서 출발하는 것이 현장 동선과 맞다.
+    trip_starts = [
+        vehicle.start_node if round_number == 1 else 0
+        for vehicle, round_number in trip_specs
+    ]
+    # 도착지는 항상 센터다. 어르신을 센터로 모셔오는 것이 송영이다.
+    trip_ends = [0] * len(trip_specs)
+    manager = pywrapcp.RoutingIndexManager(
+        len(resolved), len(trip_specs), trip_starts, trip_ends
+    )
     routing = pywrapcp.RoutingModel(manager)
 
     def distance_callback(from_index: int, to_index: int) -> int:
@@ -199,7 +223,10 @@ def optimize_routes(
     distance_index = routing.RegisterTransitCallback(distance_callback)
     routing.SetArcCostEvaluatorOfAllVehicles(distance_index)
 
+    # 배열 길이는 전체 노드 수와 같아야 한다. 콜백이 원본 노드 번호로 색인하는데
+    # 자차 출발지 노드가 뒤에 붙으므로, 짧으면 IndexError 가 난다.
     service = [0] + [settings.stop_service_minutes] * passenger_count
+    service += [0] * (len(resolved) - len(service))
 
     def time_callback(from_index: int, to_index: int) -> int:
         from_node = manager.IndexToNode(from_index)
@@ -228,6 +255,7 @@ def optimize_routes(
         routing.SetFixedCostOfVehicle(0 if trip_index % 2 == 0 else 20_000, trip_index)
 
     demands = [0] + [1] * passenger_count
+    demands += [0] * (len(resolved) - len(demands))
 
     def demand_callback(index: int) -> int:
         return demands[manager.IndexToNode(index)]
@@ -349,6 +377,7 @@ def optimize_routes(
                     stops=stops,
                 )
             )
+        start_location = resolved[vehicle.start_node]
         vehicle_results.append(
             VehicleResult(
                 vehicle_id=vehicle.vehicle_id,
@@ -356,6 +385,10 @@ def optimize_routes(
                 plate_number=vehicle.plate_number,
                 driver_name=vehicle.driver_name,
                 capacity=vehicle.capacity,
+                start_name=start_location.name,
+                start_address=start_location.address,
+                start_latitude=start_location.latitude,
+                start_longitude=start_location.longitude,
                 trips=trips,
             )
         )
@@ -375,6 +408,17 @@ def optimize_routes(
         vehicles=vehicle_results,
         notices=[
             "모든 픽업 예상 시각은 요청 시간창 안에 있으며 차량별 운행은 최대 2회입니다.",
+            *(
+                [
+                    "자차 송영 차량("
+                    + ", ".join(
+                        v.plate_number for v in vehicles if v.start_node != 0
+                    )
+                    + ")은 1회차를 지정된 출발지에서 시작하고 센터로 복귀합니다."
+                ]
+                if any(v.start_node != 0 for v in vehicles)
+                else []
+            ),
             "MVP의 이동시간은 직선거리×도로계수와 평균속도로 산정됩니다. 운영 전 실시간 도로 시간행렬 연동을 권장합니다.",
         ],
     )

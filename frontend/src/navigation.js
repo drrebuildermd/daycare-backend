@@ -1,22 +1,22 @@
 import { Alert, Linking } from 'react-native';
 
+// 카카오내비 딥링크에는 카카오 '네이티브 앱 키'가 필요하다.
+// Kakao Developers > 내 애플리케이션 > 앱 키 > 네이티브 앱 키
+//   로컬 개발 : frontend/.env 의 EXPO_PUBLIC_KAKAO_NATIVE_KEY
+//   APK 빌드  : frontend/eas.json 의 preview/production env
+// 키가 없으면 카카오맵 길찾기로 자동으로 떨어지므로 앱이 멈추지는 않는다.
+const KAKAO_NATIVE_KEY = process.env.EXPO_PUBLIC_KAKAO_NATIVE_KEY || '';
+
 /**
- * 목적지까지 길안내를 시작한다.
+ * 목적지까지의 길안내 링크 후보를 순서대로 만든다.
  *
- * 예전에는 백엔드가 만든 kakaonavi://navigate?params={JSON} 을 그대로 열었는데
- * 두 가지 문제가 있었다.
+ * 1순위 카카오내비: 출발지를 현재 위치로 잡고 바로 안내를 시작한다.
+ *   kakaonavi://navigate?name=&x=경도&y=위도&coord_type=wgs84&key=네이티브앱키
+ *   key 가 없으면 "필수 파라미터가 존재하지 않습니다" 오류가 나므로,
+ *   키가 없을 때는 아예 후보에서 뺀다.
  *
- *   1) 그 형식은 카카오내비 SDK 가 쓰는 것으로, 딥링크로 직접 부르면
- *      네이티브 앱 키가 필요하다. 키가 없어 "필수 파라미터가 존재하지 않습니다"
- *      오류가 떴다.
- *   2) app.json 의 intentFilters 에 kakaonavi 스킴이 등록돼 있어서 우리 앱도
- *      그 링크의 수신자로 잡혔고, 안드로이드가 앱 선택 팝업을 띄웠다.
- *
- * 그래서 키가 필요 없는 카카오맵 길찾기 스킴을 쓴다.
- *   kakaomap://route?ep={위도},{경도}&by=CAR
- * 출발지(sp)를 비우면 현재 위치에서 자동차 길안내가 바로 시작된다.
- *
- * 앱이 없으면 웹 링크로 떨어진다. 브라우저에서 열리므로 항상 무언가는 뜬다.
+ * 2순위 카카오맵 길찾기: 키가 필요 없다. 카카오내비가 없는 폰의 대비책.
+ * 3순위 웹: 앱이 하나도 없을 때.
  */
 export function buildNavigationTargets(stop) {
   const lat = Number(stop?.latitude);
@@ -29,12 +29,29 @@ export function buildNavigationTargets(stop) {
     return [`https://map.kakao.com/?q=${query}`];
   }
 
-  return [
-    // 1순위: 설치돼 있으면 카카오맵이 바로 자동차 길안내를 시작한다.
-    `kakaomap://route?ep=${lat},${lng}&by=CAR`,
-    // 2순위: 앱이 없을 때. 카카오맵 웹이 열리고 앱 설치/실행을 안내한다.
+  const targets = [];
+
+  if (KAKAO_NATIVE_KEY) {
+    const params = [
+      `name=${encodeURIComponent(name)}`,
+      `x=${lng}`,
+      `y=${lat}`,
+      'coord_type=wgs84',
+      `key=${encodeURIComponent(KAKAO_NATIVE_KEY)}`,
+      // 1 = 자동차. 지정하지 않으면 카카오내비가 되묻는다.
+      'vehicle_type=1',
+      // 100 = 추천 경로.
+      'rpoption=100',
+      'returnuri=',
+    ].join('&');
+    targets.push(`kakaonavi://navigate?${params}`);
+  }
+
+  targets.push(`kakaomap://route?ep=${lat},${lng}&by=CAR`);
+  targets.push(
     `https://map.kakao.com/link/to/${encodeURIComponent(name)},${lat},${lng}`,
-  ];
+  );
+  return targets;
 }
 
 /**
@@ -58,7 +75,10 @@ export async function startNavigation(stop) {
 
   Alert.alert(
     '길안내를 시작하지 못했습니다',
-    '카카오맵 앱이 설치되어 있는지 확인해 주세요.',
+    '카카오내비 또는 카카오맵 앱이 설치되어 있는지 확인해 주세요.',
   );
   return false;
 }
+
+/** 설정 화면 등에서 키가 들어갔는지 확인할 때 쓴다. */
+export const hasKakaoNaviKey = Boolean(KAKAO_NATIVE_KEY);

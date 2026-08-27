@@ -7,7 +7,7 @@ import hashlib
 
 import httpx
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 from app.config import Settings, get_settings
-from app.database import init_database, list_completions, today_kst, upsert_completion
+from app.database import KST, init_database, list_completions, today_kst, upsert_completion
 from app.geocoding import resolve_locations
 from app.dispatch import load_dispatch, notify_drivers, save_dispatch
 from app.drivers import deactivate_device, list_devices, register_device
@@ -153,6 +153,44 @@ def _archive_passengers(request: OptimizeRequest, resolved) -> None:
         print(f"[Supabase 백업 실패] {error}")
 
 
+def _archive_vehicles(request: OptimizeRequest, resolved) -> None:
+    """차량 설정을 Supabase에 백업한다. 실패해도 배차 결과는 그대로 반환한다.
+
+    자차 송영 출발지까지 남겨야 나중에 "그날 어디서 출발했는지" 확인할 수 있다.
+    """
+    rows = []
+    for vehicle in request.vehicles:
+        row = {
+            "vehicle_id": vehicle.id or vehicle.plate_number,
+            "vehicle_type": vehicle.vehicle_type,
+            "plate_number": vehicle.plate_number,
+            "driver_name": vehicle.driver_name,
+            "capacity": vehicle.capacity,
+            "start_type": vehicle.start_type,
+            "start_address": vehicle.start_address,
+            "updated_at": datetime.now(KST).replace(microsecond=0).isoformat(),
+        }
+        rows.append(row)
+
+    # 지오코딩된 자차 출발지 좌표를 채워 넣는다.
+    # 노드 순서는 [센터, *어르신, *커스텀출발지] 이므로 뒤에서부터 순서대로 대응된다.
+    node = 1 + len(request.passengers)
+    for row, vehicle in zip(rows, request.vehicles):
+        if vehicle.start_type == "custom" and node < len(resolved):
+            row["start_latitude"] = resolved[node].latitude
+            row["start_longitude"] = resolved[node].longitude
+            node += 1
+
+    if not rows:
+        return
+    try:
+        get_supabase().table("vehicles").upsert(
+            rows, on_conflict="vehicle_id"
+        ).execute()
+    except Exception as error:  # noqa: BLE001 - 백업 실패가 배차를 막으면 안 된다
+        print(f"[Supabase 차량 백업 실패] {error}")
+
+
 @app.get("/api/health")
 def health(settings: Settings = Depends(get_settings)) -> dict:
     """Render의 헬스 체크와 폰에서의 연결 확인용.
@@ -236,12 +274,21 @@ async def run_optimization(
         )
     request = request.model_copy(update={"passengers": attending})
 
-    # 노드 0은 센터, 1번부터가 어르신. optimize_routes가 이 순서를 전제한다.
-    resolved = await resolve_locations([request.center, *request.passengers], settings)
+    # 노드 순서: 0=센터, 1..n=어르신, n+1..=자차 출발지.
+    # optimize_routes 가 이 순서를 그대로 전제한다.
+    custom_starts = [
+        location
+        for location in (vehicle.as_start_location() for vehicle in request.vehicles)
+        if location is not None
+    ]
+    resolved = await resolve_locations(
+        [request.center, *request.passengers, *custom_starts], settings
+    )
     response = optimize_routes(request, resolved, settings)
     if absent_count:
         response.notices.append(f"결석 처리된 {absent_count}명은 배차에서 제외했습니다.")
     _archive_passengers(request, resolved)
+    _archive_vehicles(request, resolved)
     return response
 
 

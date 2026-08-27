@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
+  BackHandler,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -63,6 +64,11 @@ const emptyVehicle = () => ({
   plateNumber: '',
   driverName: '',
   capacity: '4',
+  // 자차 송영. 기본은 센터 출발.
+  startType: 'center',
+  startAddress: '',
+  startLatitude: '',
+  startLongitude: '',
 });
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -225,6 +231,12 @@ export default function App() {
       if (plateNumbers.has(vehicle.plateNumber.trim())) return `차량번호 ${vehicle.plateNumber}가 중복되었습니다.`;
       plateNumbers.add(vehicle.plateNumber.trim());
     }
+    const missingStart = vehicles.find(
+      (vehicle) => vehicle.startType === 'custom' && !(vehicle.startAddress || '').trim(),
+    );
+    if (missingStart) {
+      return `${missingStart.plateNumber || '차량'}은 자차 출발로 설정됐지만 출발지 주소가 없습니다.`;
+    }
     if (!center.address.trim()) return '센터 주소를 입력해 주세요.';
     const entered = passengers.filter((item) => item.name || item.address);
     if (!entered.length) return '어르신을 한 명 이상 입력해 주세요.';
@@ -270,6 +282,13 @@ export default function App() {
           plate_number: vehicle.plateNumber.trim(),
           driver_name: (vehicle.driverName || '').trim() || null,
           capacity: Number(vehicle.capacity),
+          start_type: vehicle.startType === 'custom' ? 'custom' : 'center',
+          start_address: (vehicle.startAddress || '').trim() || null,
+          // 좌표는 백엔드가 주소로 변환한다. 비어 있으면 보내지 않는다.
+          start_latitude: vehicle.startLatitude === '' || vehicle.startLatitude == null
+            ? null : Number(vehicle.startLatitude),
+          start_longitude: vehicle.startLongitude === '' || vehicle.startLongitude == null
+            ? null : Number(vehicle.startLongitude),
         })),
         passengers: active.map((item) => ({
           ...asLocation(item),
@@ -380,6 +399,37 @@ export default function App() {
       Alert.alert('다운로드 실패', '백엔드 연결 주소와 네트워크를 확인해 주세요.');
     }
   };
+
+  // 갤럭시 하단 뒤로 가기로 앱이 그대로 종료되던 문제.
+  // 화면 깊이에 따라 한 단계씩 되돌리고, 최상위에서만 종료를 허용한다.
+  useEffect(() => {
+    const onBack = () => {
+      if (mode === 'admin') {
+        // 관제 화면에서 특정 차량만 보고 있으면 먼저 전체 보기로.
+        if (screen === 'results' && focusVehicleId) {
+          setFocusVehicleId(null);
+          return true;
+        }
+        // 탭을 한 단계씩 되돌린다.
+        if (screen === 'results') { setScreen('input'); return true; }
+        if (screen === 'input') { setScreen('vehicles'); return true; }
+        // 첫 탭에서는 모드 선택으로 빠진다.
+        setMode('gate');
+        return true;
+      }
+      if (mode === 'driver') {
+        // 기사 화면 내부 처리는 DriverScreen 이 먼저 가져간다.
+        // 여기까지 왔다면 차량 선택 화면이므로 모드 선택으로 빠진다.
+        setMode('gate');
+        return true;
+      }
+      // 모드 선택 화면에서는 기본 동작(앱 종료)을 허용한다.
+      return false;
+    };
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBack);
+    return () => subscription.remove();
+  }, [mode, screen, focusVehicleId]);
 
   const chooseMode = (next) => {
     setMode(next);

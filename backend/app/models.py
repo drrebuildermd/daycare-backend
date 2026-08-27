@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -67,6 +67,33 @@ class VehicleInput(BaseModel):
     plate_number: str = Field(min_length=1, max_length=30)
     driver_name: str | None = Field(default=None, max_length=30)
     capacity: int = Field(ge=1, le=100)
+    # 자차 송영: 기사님이 센터가 아니라 자택 등에서 출발하는 경우.
+    # 'center' 면 센터에서, 'custom' 이면 start_address 에서 출발한다.
+    start_type: Literal["center", "custom"] = "center"
+    start_address: str | None = Field(default=None, max_length=200)
+    start_latitude: Latitude | None = None
+    start_longitude: Longitude | None = None
+
+    @model_validator(mode="after")
+    def custom_start_needs_address(self):
+        if self.start_type == "custom" and not (self.start_address or "").strip():
+            raise ValueError(
+                f"{self.plate_number} 차량은 자차 출발로 설정됐지만 출발지 주소가 없습니다."
+            )
+        if (self.start_latitude is None) != (self.start_longitude is None):
+            raise ValueError("출발지 위도와 경도는 함께 입력해야 합니다.")
+        return self
+
+    def as_start_location(self) -> LocationInput | None:
+        """지오코딩에 넘길 출발지. 센터 출발이면 None."""
+        if self.start_type != "custom":
+            return None
+        return LocationInput(
+            name=f"{self.plate_number} 출발지",
+            address=(self.start_address or "").strip(),
+            latitude=self.start_latitude,
+            longitude=self.start_longitude,
+        )
 
 
 class PairRule(BaseModel):
@@ -145,6 +172,11 @@ class VehicleResult(BaseModel):
     plate_number: str
     driver_name: str | None = None
     capacity: int
+    # 1회차 출발지. 자차 송영이면 기사님 자택, 아니면 센터.
+    start_name: str | None = None
+    start_address: str | None = None
+    start_latitude: float | None = None
+    start_longitude: float | None = None
     trips: list[TripResult]
 
 

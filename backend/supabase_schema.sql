@@ -63,7 +63,36 @@ create table if not exists public.dispatches (
 );
 
 -- ---------------------------------------------------------------------------
--- 4. 어르신 명단 백업 (기존 테이블에 누락 컬럼 보강)
+-- 4. 차량 백업 (자차 송영 출발지 포함)
+-- ---------------------------------------------------------------------------
+-- 차량은 관리자 앱의 로컬 저장소가 원본이고, 배차할 때마다 여기에 백업된다.
+-- 관리자 폰을 잃어버려도 어떤 차량이 어떤 출발지로 운행했는지 남는다.
+create table if not exists public.vehicles (
+  id              bigserial primary key,
+  vehicle_id      text        not null,
+  vehicle_type    text        not null,
+  plate_number    text        not null,
+  driver_name     text,
+  capacity        integer     not null,
+  -- 'center' 면 센터에서, 'custom' 이면 아래 주소에서 1회차를 시작한다.
+  start_type      text        not null default 'center'
+                    check (start_type in ('center', 'custom')),
+  start_address   text,
+  start_latitude  double precision,
+  start_longitude double precision,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  constraint vehicles_vehicle_id_key unique (vehicle_id)
+);
+
+-- 이미 테이블이 있는 경우를 대비해 컬럼만 따로 보강한다.
+alter table public.vehicles add column if not exists start_type text default 'center';
+alter table public.vehicles add column if not exists start_address text;
+alter table public.vehicles add column if not exists start_latitude double precision;
+alter table public.vehicles add column if not exists start_longitude double precision;
+
+-- ---------------------------------------------------------------------------
+-- 5. 어르신 명단 백업 (기존 테이블에 누락 컬럼 보강)
 -- ---------------------------------------------------------------------------
 create table if not exists public.passengers (
   id             bigserial primary key,
@@ -83,7 +112,7 @@ alter table public.passengers add column if not exists detail_address text;
 
 
 -- ===========================================================================
--- 5. 보안 (RLS) - 순서를 반드시 지키세요
+-- 6. 보안 (RLS) - 순서를 반드시 지키세요
 -- ===========================================================================
 --
 -- 이 테이블들에는 어르신 성함, 자택 주소, 보호자 연락처가 들어갑니다.
@@ -115,6 +144,7 @@ alter table public.passengers add column if not exists detail_address text;
 -- alter table public.dispatches        enable row level security;
 -- alter table public.driver_devices    enable row level security;
 -- alter table public.passengers        enable row level security;
+-- alter table public.vehicles          enable row level security;
 
 --
 --   5) 다시 /api/health 가 200 인지, 배차와 탑승완료가 동작하는지 확인합니다.

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Linking, Pressable, ScrollView,
+  ActivityIndicator, Alert, BackHandler, Linking, Pressable, ScrollView,
   StyleSheet, Text, View,
 } from 'react-native';
 
@@ -68,6 +68,17 @@ export default function DriverScreen({ onExit }) {
   }, [phase, vehicleId]);
 
   const vehicle = (dispatch?.vehicles || []).find((v) => v.vehicle_id === vehicleId);
+
+  // 차량을 고른 뒤 뒤로 가기를 누르면 차량 선택 화면으로 돌아간다.
+  // 여기서 처리하지 않으면 App.js 핸들러가 모드 선택까지 빠져버린다.
+  useEffect(() => {
+    if (!vehicleId) return undefined;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      setVehicleId(null);
+      return true;
+    });
+    return () => subscription.remove();
+  }, [vehicleId]);
 
   const completeStop = async (stop, tripRound) => {
     setSaving((current) => ({ ...current, [stop.passenger_id]: true }));
@@ -184,6 +195,11 @@ export default function DriverScreen({ onExit }) {
                 <Text style={styles.vehiclePickMeta}>
                   {item.driver_name ? `${item.driver_name} 선생님 · ` : ''}총 {total}명
                 </Text>
+                {!!item.start_address && item.start_name !== '센터' && (
+                  <Text style={styles.vehiclePickStart}>
+                    🏠 1회차 출발: {item.start_address}
+                  </Text>
+                )}
               </Pressable>
             );
           })}
@@ -329,6 +345,7 @@ const styles = StyleSheet.create({
   vehiclePickName: { color: '#0F172A', fontSize: 24, fontWeight: '900' },
   vehiclePickPlate: { color: '#0F766E', fontSize: 17, fontWeight: '800', marginTop: 2 },
   vehiclePickMeta: { color: '#64748B', fontSize: 14, marginTop: 8 },
+  vehiclePickStart: { color: '#B45309', fontSize: 13, fontWeight: '700', marginTop: 6, lineHeight: 19 },
 
   listBody: { padding: 14, paddingBottom: 40 },
   roundHeader: { flexDirection: 'row', alignItems: 'baseline', gap: 10, marginTop: 8, marginBottom: 10, paddingHorizontal: 4 },
