@@ -37,6 +37,13 @@ export const registerDriverDevice = (payload) => request('/api/driver-devices', 
 export const notifyDispatch = (result) => request('/api/dispatch/notify', { method: 'POST', body: JSON.stringify(result) });
 export const fetchTodayDispatch = () => request('/api/dispatch/today');
 
+// 기사님이 오늘 배차표를 확인했다고 표시한다. (기사 -> 관리자)
+export const acknowledgeDispatch = (payload) =>
+  request('/api/dispatch/ack', { method: 'POST', body: JSON.stringify(payload) });
+
+// 관제 화면이 어느 차량이 확인했는지 보려고 받아간다.
+export const fetchTodayAcks = () => request('/api/dispatch/acks/today');
+
 // --- 실시간 갱신 ---
 //
 // 예전에는 여기서 수파베이스를 직접 구독했다. 그러려면 anon 키를 앱에 넣어야 하는데,

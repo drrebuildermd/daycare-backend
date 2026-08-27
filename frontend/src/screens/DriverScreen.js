@@ -4,13 +4,27 @@ import {
   StyleSheet, Text, View,
 } from 'react-native';
 
-import { fetchCompletedStopMap, fetchTodayDispatch, saveRideCompletion } from '../api';
+import {
+  acknowledgeDispatch,
+  fetchCompletedStopMap,
+  fetchTodayAcks,
+  fetchTodayDispatch,
+  saveRideCompletion,
+} from '../api';
 import { startNavigation } from '../navigation';
 import Accordion from '../components/Accordion';
 import RouteMap from '../components/RouteMap';
 
 // 관제 화면과 같은 주기로 맞춘다. 다른 기사님이 태운 어르신이 내 화면에도 반영된다.
 const POLL_MS = 20000;
+
+function formatAckTime(value) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleTimeString('ko-KR', {
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+}
 
 /**
  * 기사님 전용 화면.
@@ -20,9 +34,12 @@ const POLL_MS = 20000;
  */
 export default function DriverScreen({ onExit }) {
   const [dispatch, setDispatch] = useState(null);
+  const [ackList, setAckList] = useState([]);
   const [vehicleId, setVehicleId] = useState(null);
   const [completed, setCompleted] = useState({});
   const [saving, setSaving] = useState({});
+  const [ackedAt, setAckedAt] = useState(null);
+  const [acking, setAcking] = useState(false);
   const [phase, setPhase] = useState('loading'); // loading | ready | error
   const [elapsed, setElapsed] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
@@ -37,12 +54,14 @@ export default function DriverScreen({ onExit }) {
       () => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 1000,
     );
     try {
-      const [today, done] = await Promise.all([
+      const [today, done, acks] = await Promise.all([
         fetchTodayDispatch(),
         fetchCompletedStopMap().catch(() => ({})),
+        fetchTodayAcks().catch(() => ({ records: [] })),
       ]);
       setDispatch(today.result || null);
       setCompleted(done);
+      setAckList(acks.records || []);
       setPhase('ready');
     } catch (error) {
       setErrorMessage(error.message);
@@ -68,6 +87,11 @@ export default function DriverScreen({ onExit }) {
   }, [phase, vehicleId]);
 
   const vehicle = (dispatch?.vehicles || []).find((v) => v.vehicle_id === vehicleId);
+
+  useEffect(() => {
+    const mine = ackList.find((item) => item.vehicle_id === vehicleId);
+    setAckedAt(mine ? mine.acknowledged_at : null);
+  }, [ackList, vehicleId]);
 
   // 차량을 고른 뒤 뒤로 가기를 누르면 차량 선택 화면으로 돌아간다.
   // 여기서 처리하지 않으면 App.js 핸들러가 모드 선택까지 빠져버린다.
@@ -109,6 +133,22 @@ export default function DriverScreen({ onExit }) {
         delete next[stop.passenger_id];
         return next;
       });
+    }
+  };
+
+  const confirmDispatch = async () => {
+    setAcking(true);
+    try {
+      const record = await acknowledgeDispatch({
+        vehicle_id: vehicle.vehicle_id,
+        vehicle_label: `${vehicle.vehicle_type} ${vehicle.plate_number}`,
+        driver_name: vehicle.driver_name || null,
+      });
+      setAckedAt(record.acknowledged_at);
+    } catch (error) {
+      Alert.alert('확인 처리 실패', error.message);
+    } finally {
+      setAcking(false);
     }
   };
 
@@ -195,9 +235,19 @@ export default function DriverScreen({ onExit }) {
                 <Text style={styles.vehiclePickMeta}>
                   {item.driver_name ? `${item.driver_name} 선생님 · ` : ''}총 {total}명
                 </Text>
-                {!!item.start_address && item.start_name !== '센터' && (
-                  <Text style={styles.vehiclePickStart}>
-                    🏠 1회차 출발: {item.start_address}
+                {item.start_type === 'custom' ? (
+                  <View style={styles.startRow}>
+                    <View style={styles.selfBadge}>
+                      <Text style={styles.selfBadgeText}>자차 송영</Text>
+                    </View>
+                    <Text style={styles.vehiclePickStart} numberOfLines={2}>
+                      🏠 {item.start_address}
+                    </Text>
+                  </View>
+                ) : (
+                  // 센터 출발이면 긴 주소 대신 등록된 센터명을 보여준다.
+                  <Text style={styles.vehiclePickCenter}>
+                    🏫 {item.start_name || '센터'}에서 출발
                   </Text>
                 )}
               </Pressable>
@@ -231,6 +281,21 @@ export default function DriverScreen({ onExit }) {
       </View>
 
       <ScrollView contentContainerStyle={styles.listBody}>
+        <View style={[styles.ackBar, ackedAt && styles.ackBarDone]}>
+          <Text style={[styles.ackText, ackedAt && styles.ackTextDone]}>
+            {ackedAt
+              ? `✅ 배차표를 확인했습니다 (${formatAckTime(ackedAt)})`
+              : '오늘 배차표를 확인하셨으면 눌러 주세요. 관리자에게 전달됩니다.'}
+          </Text>
+          {!ackedAt && (
+            <Pressable style={styles.ackButton} onPress={confirmDispatch} disabled={acking}>
+              {acking
+                ? <ActivityIndicator color="#FFFFFF" />
+                : <Text style={styles.ackButtonText}>배차표 확인 완료</Text>}
+            </Pressable>
+          )}
+        </View>
+
         <Accordion
           title="🗺️ 오늘 내 동선 지도"
           summary={`${totalStops}곳 · 눌러서 펼치기`}
@@ -345,7 +410,17 @@ const styles = StyleSheet.create({
   vehiclePickName: { color: '#0F172A', fontSize: 24, fontWeight: '900' },
   vehiclePickPlate: { color: '#0F766E', fontSize: 17, fontWeight: '800', marginTop: 2 },
   vehiclePickMeta: { color: '#64748B', fontSize: 14, marginTop: 8 },
-  vehiclePickStart: { color: '#B45309', fontSize: 13, fontWeight: '700', marginTop: 6, lineHeight: 19 },
+  vehiclePickStart: { color: '#B45309', fontSize: 13, fontWeight: '700', lineHeight: 19, flexShrink: 1 },
+  vehiclePickCenter: { color: '#0F766E', fontSize: 13, fontWeight: '700', marginTop: 6 },
+  startRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 6 },
+  selfBadge: { backgroundColor: '#FEF3C7', borderWidth: 1, borderColor: '#FCD34D', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  selfBadgeText: { color: '#B45309', fontSize: 11, fontWeight: '900' },
+  ackBar: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0', padding: 14, marginBottom: 12 },
+  ackBarDone: { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' },
+  ackText: { flex: 1, color: '#475569', fontSize: 13, fontWeight: '700', lineHeight: 19 },
+  ackTextDone: { color: '#047857' },
+  ackButton: { backgroundColor: '#0F766E', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12 },
+  ackButtonText: { color: '#FFFFFF', fontSize: 13.5, fontWeight: '900' },
 
   listBody: { padding: 14, paddingBottom: 40 },
   roundHeader: { flexDirection: 'row', alignItems: 'baseline', gap: 10, marginTop: 8, marginBottom: 10, paddingHorizontal: 4 },

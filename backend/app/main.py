@@ -18,9 +18,18 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from app.config import Settings, get_settings
 from app.database import KST, init_database, list_completions, today_kst, upsert_completion
 from app.geocoding import resolve_locations
-from app.dispatch import load_dispatch, notify_drivers, save_dispatch
+from app.dispatch import (
+    acknowledge_dispatch,
+    list_acknowledgements,
+    load_dispatch,
+    notify_drivers,
+    save_dispatch,
+)
 from app.drivers import deactivate_device, list_devices, register_device
 from app.models import (
+    DispatchAckCreate,
+    DispatchAckList,
+    DispatchAckRecord,
     DispatchNotifyResult,
     DispatchToday,
     DriverDeviceCreate,
@@ -243,6 +252,22 @@ def read_today_dispatch() -> DispatchToday:
     service_date = today_kst()
     return DispatchToday(
         service_date=service_date.isoformat(), result=load_dispatch(service_date)
+    )
+
+
+@app.post("/api/dispatch/ack", response_model=DispatchAckRecord)
+def acknowledge_today_dispatch(payload: DispatchAckCreate) -> DispatchAckRecord:
+    """기사님이 오늘 배차표를 확인했다고 표시한다."""
+    return acknowledge_dispatch(payload, today_kst())
+
+
+@app.get("/api/dispatch/acks/today", response_model=DispatchAckList)
+def read_today_acknowledgements() -> DispatchAckList:
+    """관리자 관제 화면이 어느 차량이 확인했는지 보려고 받아간다."""
+    service_date = today_kst()
+    return DispatchAckList(
+        service_date=service_date.isoformat(),
+        records=list_acknowledgements(service_date),
     )
 
 

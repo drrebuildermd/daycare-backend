@@ -173,6 +173,8 @@ class VehicleResult(BaseModel):
     driver_name: str | None = None
     capacity: int
     # 1회차 출발지. 자차 송영이면 기사님 자택, 아니면 센터.
+    # start_name 은 센터 출발이면 센터명(예: 수주간보호센터)이 들어간다.
+    start_type: Literal["center", "custom"] = "center"
     start_name: str | None = None
     start_address: str | None = None
     start_latitude: float | None = None
@@ -277,3 +279,21 @@ class DispatchNotifyResult(BaseModel):
 class DispatchToday(BaseModel):
     service_date: str
     result: OptimizeResponse | None = None
+
+
+class DispatchAckCreate(BaseModel):
+    """기사님이 배차표를 확인했다는 신호."""
+
+    vehicle_id: str = Field(min_length=1, max_length=100)
+    vehicle_label: str = Field(min_length=1, max_length=100)
+    driver_name: str | None = Field(default=None, max_length=30)
+
+
+class DispatchAckRecord(DispatchAckCreate):
+    service_date: str
+    acknowledged_at: str
+
+
+class DispatchAckList(BaseModel):
+    service_date: str
+    records: list[DispatchAckRecord] = Field(default_factory=list)

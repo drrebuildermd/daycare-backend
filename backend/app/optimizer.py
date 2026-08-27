@@ -377,6 +377,9 @@ def optimize_routes(
                     stops=stops,
                 )
             )
+        # start_node 0 은 센터다. 이때 start_name 은 센터 등록 시 입력한
+        # 센터명(예: 수주간보호센터)이 그대로 들어간다. 기사님 화면에서
+        # 긴 주소 대신 센터명을 보여줄 수 있어야 한다.
         start_location = resolved[vehicle.start_node]
         vehicle_results.append(
             VehicleResult(
@@ -385,6 +388,7 @@ def optimize_routes(
                 plate_number=vehicle.plate_number,
                 driver_name=vehicle.driver_name,
                 capacity=vehicle.capacity,
+                start_type="custom" if vehicle.start_node != 0 else "center",
                 start_name=start_location.name,
                 start_address=start_location.address,
                 start_latitude=start_location.latitude,

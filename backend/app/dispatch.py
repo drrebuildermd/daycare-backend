@@ -15,10 +15,17 @@ from postgrest.exceptions import APIError
 
 from .database import KST
 from .drivers import deactivate_device, list_devices
-from .models import DispatchNotifyResult, DriverNotifyOutcome, OptimizeResponse
+from .models import (
+    DispatchAckCreate,
+    DispatchAckRecord,
+    DispatchNotifyResult,
+    DriverNotifyOutcome,
+    OptimizeResponse,
+)
 from .supabase_client import get_supabase
 
 TABLE = "dispatches"
+ACK_TABLE = "dispatch_acks"
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 
 
@@ -149,3 +156,65 @@ async def notify_drivers(result: OptimizeResponse, service_date: date) -> Dispat
                 pass
 
     return DispatchNotifyResult(sent=len(messages) - failed, failed=failed, outcomes=outcomes)
+
+
+# ---------------------------------------------------------------------------
+# 배차표 확인 (기사 -> 관리자)
+# ---------------------------------------------------------------------------
+# 기사님이 오늘 배차표를 봤다는 신호를 남긴다. 관리자 관제 화면에서
+# 누가 아직 확인하지 않았는지 한눈에 보이면 현장 소통 오류가 줄어든다.
+
+
+def acknowledge_dispatch(
+    payload: DispatchAckCreate, service_date: date
+) -> DispatchAckRecord:
+    now = datetime.now(KST).replace(microsecond=0)
+    row = {
+        "service_date": service_date.isoformat(),
+        "vehicle_id": payload.vehicle_id,
+        "vehicle_label": payload.vehicle_label,
+        "driver_name": payload.driver_name,
+        "acknowledged_at": now.isoformat(),
+    }
+    try:
+        # 다시 눌러도 새 줄을 만들지 않고 시각만 갱신한다.
+        result = (
+            get_supabase()
+            .table(ACK_TABLE)
+            .upsert(row, on_conflict="service_date,vehicle_id")
+            .execute()
+        )
+    except APIError as error:
+        raise HTTPException(
+            status_code=502, detail=f"배차 확인 저장에 실패했습니다: {error.message}"
+        ) from error
+    if not result.data:
+        raise HTTPException(status_code=502, detail="배차 확인 저장 결과가 비어 있습니다.")
+    return _to_ack(result.data[0])
+
+
+def list_acknowledgements(service_date: date) -> list[DispatchAckRecord]:
+    try:
+        result = (
+            get_supabase()
+            .table(ACK_TABLE)
+            .select("*")
+            .eq("service_date", service_date.isoformat())
+            .order("acknowledged_at", desc=False)
+            .execute()
+        )
+    except APIError as error:
+        raise HTTPException(
+            status_code=502, detail=f"배차 확인 조회에 실패했습니다: {error.message}"
+        ) from error
+    return [_to_ack(row) for row in result.data]
+
+
+def _to_ack(row: dict) -> DispatchAckRecord:
+    return DispatchAckRecord(
+        service_date=str(row["service_date"]),
+        vehicle_id=row["vehicle_id"],
+        vehicle_label=row["vehicle_label"],
+        driver_name=row.get("driver_name"),
+        acknowledged_at=str(row["acknowledged_at"]),
+    )

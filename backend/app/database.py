@@ -35,7 +35,7 @@ def init_database(settings: Settings) -> None:
     스키마 SQL을 깜빡한 채 배포하면 첫 '탑승 완료'를 누를 때까지 아무도 모른다.
     여기서 미리 터뜨려 배포 로그에 남긴다.
     """
-    for table in (TABLE, "driver_devices", "dispatches"):
+    for table in (TABLE, "driver_devices", "dispatches", "dispatch_acks"):
         try:
             get_supabase().table(table).select("id").limit(1).execute()
         except APIError as error:

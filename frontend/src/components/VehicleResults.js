@@ -84,8 +84,16 @@ const Trip = ({ trip, vehicle, completedStops, savingStops, onComplete }) => (
   </View>
 );
 
+function formatAckTime(value) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleTimeString('ko-KR', {
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+}
+
 export default function VehicleResults({
-  result, completedStops, savingStops, onComplete, focusVehicleId,
+  result, completedStops, savingStops, onComplete, focusVehicleId, acks = [],
 }) {
   // 기사님이 알림으로 들어온 경우 본인 차량만 보여준다.
   const shownVehicles = (result.vehicles || []).filter(
@@ -112,12 +120,40 @@ export default function VehicleResults({
       {shownVehicles.map((vehicle) => (
         <View key={vehicle.vehicle_id} style={styles.vehicleCard}>
           <View style={styles.vehicleHeader}>
-            <View>
-              <Text style={styles.vehicleName}>{vehicle.vehicle_type}</Text>
+            <View style={{ flex: 1 }}>
+              <View style={styles.nameLine}>
+                <Text style={styles.vehicleName}>{vehicle.vehicle_type}</Text>
+                {vehicle.start_type === 'custom' ? (
+                  <View style={[styles.originBadge, styles.originSelf]}>
+                    <Text style={styles.originSelfText}>🏠 자차 송영</Text>
+                  </View>
+                ) : (
+                  <View style={[styles.originBadge, styles.originCenter]}>
+                    <Text style={styles.originCenterText}>🏫 센터 차량</Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.vehicleCapacity}>
                 {vehicle.plate_number} · 정원 {vehicle.capacity}명 · 최대 2회
                 {vehicle.driver_name ? ` · ${vehicle.driver_name} 선생님` : ''}
               </Text>
+              {vehicle.start_type === 'custom' && !!vehicle.start_address && (
+                <Text style={styles.originAddress}>🏠 1회차 출발: {vehicle.start_address}</Text>
+              )}
+
+              {/* 기사님이 배차표를 봤는지. 안 본 차량이 눈에 띄어야 한다. */}
+              {(() => {
+                const ack = acks.find((item) => item.vehicle_id === vehicle.vehicle_id);
+                return (
+                  <View style={[styles.ackChip, ack ? styles.ackChipDone : styles.ackChipWait]}>
+                    <Text style={[styles.ackChipText, ack ? styles.ackChipTextDone : styles.ackChipTextWait]}>
+                      {ack
+                        ? `✅ 기사님 확인 완료 · ${formatAckTime(ack.acknowledged_at)}`
+                        : '⏳ 기사님 확인 대기 중'}
+                    </Text>
+                  </View>
+                );
+              })()}
             </View>
             <View style={styles.vehicleIcon}><Text style={styles.vehicleIconText}>🚐</Text></View>
           </View>
@@ -157,6 +193,19 @@ const styles = StyleSheet.create({
   vehicleHeader: { padding: 17, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F8FAFC' },
   vehicleName: { color: '#0F172A', fontSize: 19, fontWeight: '900' },
   vehicleCapacity: { color: '#64748B', marginTop: 3, fontSize: 12 },
+  nameLine: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  originBadge: { borderRadius: 7, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 3 },
+  originCenter: { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' },
+  originSelf: { backgroundColor: '#FEF3C7', borderColor: '#FCD34D' },
+  originCenterText: { color: '#047857', fontSize: 11, fontWeight: '900' },
+  originSelfText: { color: '#B45309', fontSize: 11, fontWeight: '900' },
+  originAddress: { color: '#B45309', fontSize: 12, fontWeight: '700', marginTop: 4, lineHeight: 18 },
+  ackChip: { alignSelf: 'flex-start', borderRadius: 8, borderWidth: 1, paddingHorizontal: 9, paddingVertical: 5, marginTop: 8 },
+  ackChipDone: { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' },
+  ackChipWait: { backgroundColor: '#F1F5F9', borderColor: '#E2E8F0' },
+  ackChipText: { fontSize: 11.5, fontWeight: '800' },
+  ackChipTextDone: { color: '#047857' },
+  ackChipTextWait: { color: '#64748B' },
   vehicleIcon: { width: 42, height: 42, borderRadius: 13, backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center' },
   vehicleIconText: { fontSize: 21 },
   trip: { borderTopWidth: 1, borderColor: '#E2E8F0', padding: 15 },

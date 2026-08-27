@@ -23,6 +23,7 @@ import {
   API_URL,
   COMPLETION_POLL_MS,
   fetchCompletedStopMap,
+  fetchTodayAcks,
   fetchTodayCompletions,
   fetchTodayDispatch,
   getTodayCompletionExportUrl,
@@ -92,6 +93,8 @@ export default function App() {
   const [pairRules, setPairRules] = useState([]);
   const [sending, setSending] = useState(false);
   const [focusVehicleId, setFocusVehicleId] = useState(null);
+  // 기사님이 배차표를 확인했는지. 관제 화면에서 대기 중인 차량이 보여야 한다.
+  const [acks, setAcks] = useState([]);
   const [restored, setRestored] = useState(false);
   // null = 아직 모름(로딩), 'gate' = 선택 화면, 'admin' | 'driver'
   const [mode, setMode] = useState(null);
@@ -159,8 +162,14 @@ export default function App() {
 
     const refresh = async () => {
       try {
-        const map = await fetchCompletedStopMap();
-        if (!cancelled) setCompletedStops(map);
+        // 탑승 완료와 배차 확인을 같은 주기에 함께 받아온다.
+        const [map, ackList] = await Promise.all([
+          fetchCompletedStopMap(),
+          fetchTodayAcks().catch(() => ({ records: [] })),
+        ]);
+        if (cancelled) return;
+        setCompletedStops(map);
+        setAcks(ackList.records || []);
       } catch (_) {
         // 일시적인 통신 실패는 무시한다. 다음 주기에 다시 시도한다.
       }
@@ -627,6 +636,7 @@ export default function App() {
                 savingStops={savingStops}
                 onComplete={completeStop}
                 focusVehicleId={focusVehicleId}
+                acks={acks}
               />
             </>
           )}
