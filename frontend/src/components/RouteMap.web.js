@@ -189,7 +189,7 @@ export default function RouteMap({ center, vehicles, focusVehicleId }) {
   return (
     <View style={styles.card}>
       <View style={styles.mapHeader}>
-        <Text style={styles.mapTitle}>전체 동선</Text>
+        <Text style={styles.mapTitle}>{focusVehicleId ? '내 동선' : '전체 동선'}</Text>
         <Text style={styles.mapCaption}>번호는 방문 순서 · 점선은 2차 운행</Text>
       </View>
 

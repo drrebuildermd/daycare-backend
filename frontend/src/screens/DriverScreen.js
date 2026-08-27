@@ -5,6 +5,8 @@ import {
 } from 'react-native';
 
 import { fetchCompletedStopMap, fetchTodayDispatch, saveRideCompletion } from '../api';
+import Accordion from '../components/Accordion';
+import RouteMap from '../components/RouteMap';
 
 // 관제 화면과 같은 주기로 맞춘다. 다른 기사님이 태운 어르신이 내 화면에도 반영된다.
 const POLL_MS = 20000;
@@ -217,6 +219,17 @@ export default function DriverScreen({ onExit }) {
       </View>
 
       <ScrollView contentContainerStyle={styles.listBody}>
+        <Accordion
+          title="🗺️ 오늘 내 동선 지도"
+          summary={`${totalStops}곳 · 눌러서 펼치기`}
+        >
+          <RouteMap
+            center={dispatch?.center}
+            vehicles={dispatch?.vehicles || []}
+            focusVehicleId={vehicle.vehicle_id}
+          />
+        </Accordion>
+
         {trips.map((trip) => (
           <View key={trip.round}>
             <View style={styles.roundHeader}>
