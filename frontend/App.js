@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -73,6 +73,12 @@ const emptyVehicle = () => ({
 });
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+function formatClock(value) {
+  return value.toLocaleTimeString('ko-KR', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  });
+}
+
 const STORAGE_KEY = 'daycare-routing:last-session:v1';
 // 기사님 폰은 한 번 고르면 계속 기사 화면으로 열려야 한다.
 const MODE_KEY = 'daycare-routing:mode:v1';
@@ -95,6 +101,9 @@ export default function App() {
   const [focusVehicleId, setFocusVehicleId] = useState(null);
   // 기사님이 배차표를 확인했는지. 관제 화면에서 대기 중인 차량이 보여야 한다.
   const [acks, setAcks] = useState([]);
+  // 폴링이 살아 있는지 원장님이 눈으로 확인할 수 있어야 한다.
+  const [syncedAt, setSyncedAt] = useState(null);
+  const [syncing, setSyncing] = useState(false);
   const [restored, setRestored] = useState(false);
   // null = 아직 모름(로딩), 'gate' = 선택 화면, 'admin' | 'driver'
   const [mode, setMode] = useState(null);
@@ -120,6 +129,10 @@ export default function App() {
         setCompletedStops(Object.fromEntries(
           today.records.map((record) => [record.passenger_id, record.completed_at]),
         ));
+      } catch (_) {}
+      try {
+        const ackList = await fetchTodayAcks();
+        setAcks(ackList.records || []);
       } catch (_) {}
       try {
         const savedMode = await AsyncStorage.getItem(MODE_KEY);
@@ -151,34 +164,44 @@ export default function App() {
     ).catch(() => {});
   }, [restored, vehicles, center, passengers, pairRules, result]);
 
-  // 다른 기사님이 탑승 완료를 누르면 관제 화면에도 반영되어야 한다.
+  // 탑승 완료와 배차 확인은 서로를 기다리지 않는다.
+  // 예전에는 Promise.all 이라 탑승 완료 조회가 한 번 실패하면 배차 확인까지
+  // 통째로 버려졌다. 그러면 주기마다 조용히 같은 실패를 반복하면서 화면은
+  // 영원히 '확인 대기'로 남는다.
+  const syncLiveState = useCallback(async () => {
+    setSyncing(true);
+    try {
+      const [completions, ackList] = await Promise.allSettled([
+        fetchCompletedStopMap(),
+        fetchTodayAcks(),
+      ]);
+
+      if (completions.status === 'fulfilled') setCompletedStops(completions.value);
+      if (ackList.status === 'fulfilled') setAcks(ackList.value.records || []);
+
+      // 둘 다 실패하면 지금 보이는 화면이 언제 것인지 알 수 없다.
+      // 그때는 시각을 갱신하지 않아 '마지막 갱신'이 멈춘 것으로 보이게 둔다.
+      // 조용히 낡아가는 것보다 멈춘 게 보이는 편이 낫다.
+      if (completions.status === 'fulfilled' || ackList.status === 'fulfilled') {
+        setSyncedAt(new Date());
+      }
+    } finally {
+      setSyncing(false);
+    }
+  }, []);
+
+  // 다른 기사님이 탑승 완료나 배차표 확인을 누르면 관제 화면에도 반영되어야 한다.
   // 수파베이스를 직접 구독하는 대신 백엔드를 주기적으로 물어본다.
   // 관제 화면을 보고 있고 앱이 앞에 있을 때만 돈다. 배터리와 서버를 아낀다.
   useEffect(() => {
     if (screen !== 'results') return undefined;
 
-    let cancelled = false;
     let timer = null;
-
-    const refresh = async () => {
-      try {
-        // 탑승 완료와 배차 확인을 같은 주기에 함께 받아온다.
-        const [map, ackList] = await Promise.all([
-          fetchCompletedStopMap(),
-          fetchTodayAcks().catch(() => ({ records: [] })),
-        ]);
-        if (cancelled) return;
-        setCompletedStops(map);
-        setAcks(ackList.records || []);
-      } catch (_) {
-        // 일시적인 통신 실패는 무시한다. 다음 주기에 다시 시도한다.
-      }
-    };
 
     const start = () => {
       if (timer) return;
-      refresh();
-      timer = setInterval(refresh, COMPLETION_POLL_MS);
+      syncLiveState();
+      timer = setInterval(syncLiveState, COMPLETION_POLL_MS);
     };
     const stop = () => {
       clearInterval(timer);
@@ -193,11 +216,10 @@ export default function App() {
     });
 
     return () => {
-      cancelled = true;
       stop();
       subscription.remove();
     };
-  }, [screen]);
+  }, [screen, syncLiveState]);
 
   const passengerCount = useMemo(
     () => passengers.filter(
@@ -609,6 +631,18 @@ export default function App() {
                 </View>
                 <Pressable onPress={() => setScreen('input')}><Text style={styles.editLink}>입력 수정</Text></Pressable>
               </View>
+
+              {/* 폴링이 살아 있는지 눈으로 확인할 수 있어야 한다.
+                  시각이 멈춰 있으면 서버와 끊긴 것이고, 눌러서 즉시 다시 맞출 수 있다. */}
+              <Pressable style={styles.syncBar} onPress={syncLiveState} disabled={syncing}>
+                <Text style={styles.syncText}>
+                  {syncing
+                    ? '🔄 갱신 중...'
+                    : syncedAt
+                      ? `🔄 ${formatClock(syncedAt)} 기준 · 눌러서 새로고침`
+                      : '🔄 아직 갱신되지 않았습니다 · 눌러서 새로고침'}
+                </Text>
+              </Pressable>
               {!!focusVehicleId && (
                 <Pressable style={styles.focusBanner} onPress={() => setFocusVehicleId(null)}>
                   <Text style={styles.focusBannerText}>
@@ -632,6 +666,7 @@ export default function App() {
               </View>
               <VehicleResults
                 result={result}
+                vehicles={vehicles}
                 completedStops={completedStops}
                 savingStops={savingStops}
                 onComplete={completeStop}
@@ -688,6 +723,8 @@ const styles = StyleSheet.create({
   exportButton: { flex: 1, backgroundColor: '#1D4ED8', borderRadius: 13, paddingVertical: 13, alignItems: 'center' },
   dispatchButton: { flex: 1, backgroundColor: '#0F766E', borderRadius: 13, paddingVertical: 13, alignItems: 'center', justifyContent: 'center' },
   driverPanelSpacing: { marginTop: 18 },
+  syncBar: { alignSelf: 'flex-start', backgroundColor: '#E0F2FE', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7, marginBottom: 12 },
+  syncText: { color: '#0369A1', fontSize: 12, fontWeight: '700' },
   focusBanner: { backgroundColor: '#ECFDF5', borderWidth: 1, borderColor: '#A7F3D0', borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginBottom: 12 },
   focusBannerText: { color: '#047857', fontWeight: '800', fontSize: 12.5 },
   exportButtonText: { color: '#FFFFFF', fontWeight: '900', fontSize: 14 },

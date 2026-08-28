@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import Accordion from './Accordion';
@@ -97,7 +97,15 @@ function formatAckTime(value) {
 
 export default function VehicleResults({
   result, completedStops, savingStops, onComplete, focusVehicleId, acks = [],
+  vehicles = [],
 }) {
+  // 배차 결과는 계산한 순간에 박제된다. 그 뒤에 차량 정보를 고쳐도 반영되지 않고,
+  // start_type 이 없던 시절에 계산된 배차에는 이 값이 아예 들어 있지 않다.
+  // 그래서 배지는 살아 있는 차량 등록부를 먼저 본다.
+  const registry = useMemo(
+    () => new Map((vehicles || []).map((item) => [item.id, item])),
+    [vehicles],
+  );
   // 기사님이 알림으로 들어온 경우 본인 차량만 보여준다.
   const shownVehicles = (result.vehicles || []).filter(
     (vehicle) => !focusVehicleId || vehicle.vehicle_id === focusVehicleId,
@@ -122,7 +130,13 @@ export default function VehicleResults({
         <View style={styles.listPane}>
       {shownVehicles.map((vehicle) => {
         const ack = acks.find((item) => item.vehicle_id === vehicle.vehicle_id);
-        const isSelfDrive = vehicle.start_type === 'custom';
+        const registered = registry.get(vehicle.vehicle_id);
+        const isSelfDrive = registered
+          ? registered.startType === 'custom'
+          : vehicle.start_type === 'custom';
+        const startAddress = registered
+          ? (registered.startAddress || '').trim()
+          : (vehicle.start_address || '');
         const total = (vehicle.trips || [])
           .filter((trip) => trip.used)
           .reduce((sum, trip) => sum + trip.stops.length, 0);
@@ -148,8 +162,8 @@ export default function VehicleResults({
                 : { label: '⏳ 확인 대기', tone: 'default' },
             ]}
           >
-            {isSelfDrive && !!vehicle.start_address && (
-              <Text style={styles.originAddress}>🏠 1회차 출발: {vehicle.start_address}</Text>
+            {isSelfDrive && !!startAddress && (
+              <Text style={styles.originAddress}>🏠 1회차 출발: {startAddress}</Text>
             )}
             <Text style={styles.vehicleCapacity}>
               정원 {vehicle.capacity}명 · 최대 2회
