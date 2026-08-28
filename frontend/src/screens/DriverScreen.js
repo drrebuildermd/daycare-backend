@@ -11,7 +11,7 @@ import {
   fetchTodayDispatch,
   saveRideCompletion,
 } from '../api';
-import { startNavigation } from '../navigation';
+import { originForStop, startNavigation } from '../navigation';
 import Accordion from '../components/Accordion';
 import RouteMap from '../components/RouteMap';
 
@@ -152,7 +152,12 @@ export default function DriverScreen({ onExit }) {
     }
   };
 
-  const openNavigation = (stop) => startNavigation(stop);
+  // 앞 정류장(또는 회차 출발지)을 출발지로 넘긴다.
+  // 카카오맵이 GPS 를 못 잡아 출발지가 빈칸이던 문제를 이걸로 없앤다.
+  const openNavigation = (stop, trip, stopIndex) => startNavigation(
+    stop,
+    originForStop({ vehicle, trip, stopIndex, center: dispatch?.center }),
+  );
 
   const callGuardian = async (stop) => {
     const digits = (stop.guardian_phone || '').replace(/[^0-9]/g, '');
@@ -316,7 +321,7 @@ export default function DriverScreen({ onExit }) {
               </Text>
             </View>
 
-            {trip.stops.map((stop) => {
+            {trip.stops.map((stop, stopIndex) => {
               const doneAt = completed[stop.passenger_id];
               const isSaving = Boolean(saving[stop.passenger_id]);
               const hasPhone = (stop.guardian_phone || '').replace(/[^0-9]/g, '').length >= 10;
@@ -344,7 +349,10 @@ export default function DriverScreen({ onExit }) {
                   </View>
 
                   <View style={styles.actionRow}>
-                    <Pressable style={[styles.action, styles.actionNavi]} onPress={() => openNavigation(stop)}>
+                    <Pressable
+                      style={[styles.action, styles.actionNavi]}
+                      onPress={() => openNavigation(stop, trip, stopIndex)}
+                    >
                       <Text style={styles.actionIcon}>🧭</Text>
                       <Text style={styles.actionLabel}>내비</Text>
                     </Pressable>

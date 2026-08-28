@@ -25,15 +25,16 @@ export default function VehicleForm({ value, index, onChange, onRemove }) {
   const summary = [
     plate || '차량번호 미입력',
     driver ? `(담당: ${driver})` : '(담당 미지정)',
-  ].join(' ');
+    value.capacity ? `· ${value.capacity}인승` : '',
+  ].filter(Boolean).join(' ');
 
   return (
     <Accordion
       index={index}
       title={`[${(value.vehicleType || '').trim() || '차종 미입력'}]`}
       summary={summary}
-      badge={isCustomStart ? '자차 출발' : (value.capacity ? `${value.capacity}인승` : null)}
-      badgeTone={isCustomStart ? 'warning' : 'default'}
+      badge={isCustomStart ? '🏠 자차 송영' : '🏫 센터 차량'}
+      badgeTone={isCustomStart ? 'warning' : 'success'}
       onRemove={onRemove}
     >
       <Field

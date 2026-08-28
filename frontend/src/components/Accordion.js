@@ -17,6 +17,8 @@ export default function Accordion({
   summary,
   badge,
   badgeTone = 'default',
+  // 배지를 여러 개 달아야 할 때. [{ label, tone }] 형태.
+  badges,
   tone = 'default',
   onRemove,
   children,
@@ -50,11 +52,19 @@ export default function Accordion({
           )}
         </View>
 
-        {!!badge && (
-          <View style={[styles.badge, styles[`badge_${badgeTone}`]]}>
-            <Text style={[styles.badgeText, styles[`badgeText_${badgeTone}`]]}>{badge}</Text>
+        {(badges && badges.length
+          ? badges
+          : (badge ? [{ label: badge, tone: badgeTone }] : [])
+        ).map((item) => (
+          <View
+            key={item.label}
+            style={[styles.badge, styles[`badge_${item.tone || 'default'}`]]}
+          >
+            <Text style={[styles.badgeText, styles[`badgeText_${item.tone || 'default'}`]]}>
+              {item.label}
+            </Text>
           </View>
-        )}
+        ))}
 
         {/* 펼침 방향을 화살표로 알린다. 접힌 카드가 눌리는 것인지 모르면 아무도 안 누른다. */}
         <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
@@ -77,7 +87,7 @@ export default function Accordion({
 const styles = StyleSheet.create({
   card: { backgroundColor: '#FFFFFF', borderRadius: 16, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0', overflow: 'hidden' },
   cardMuted: { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0' },
-  headerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 13, gap: 10 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 13, gap: 8, flexWrap: 'wrap' },
   numberBadge: { width: 26, height: 26, borderRadius: 9, backgroundColor: '#E0F2FE', alignItems: 'center', justifyContent: 'center' },
   numberBadgeMuted: { backgroundColor: '#E2E8F0' },
   number: { color: '#0369A1', fontWeight: '800', fontSize: 12 },

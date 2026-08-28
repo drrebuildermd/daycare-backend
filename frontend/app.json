@@ -2,7 +2,7 @@
   "expo": {
     "name": "송영 최적화",
     "slug": "daycare-routing-mobile",
-    "version": "1.3.0",
+    "version": "1.3.1",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
@@ -17,7 +17,7 @@
     "android": {
       "package": "com.daycare.routing",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 8,
+      "versionCode": 9,
       "usesCleartextTraffic": true
     },
     "plugins": [

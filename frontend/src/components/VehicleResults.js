@@ -1,8 +1,9 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import Accordion from './Accordion';
 import RouteMap from './RouteMap';
-import { startNavigation } from '../navigation';
+import { originForStop, startNavigation } from '../navigation';
 
 function formatCompletionTime(value) {
   const parsed = new Date(value);
@@ -18,7 +19,7 @@ const tripLabel = (vehicle, trip) => {
   return vehicle.driver_name ? `${base} - ${vehicle.driver_name} 선생님` : base;
 };
 
-const Trip = ({ trip, vehicle, completedStops, savingStops, onComplete }) => (
+const Trip = ({ trip, vehicle, center, completedStops, savingStops, onComplete }) => (
   <View style={[styles.trip, !trip.used && styles.unusedTrip]}>
     <Text style={[styles.tripLabel, !trip.used && styles.mutedText]}>{tripLabel(vehicle, trip)}</Text>
     <View style={styles.tripHeading}>
@@ -33,7 +34,7 @@ const Trip = ({ trip, vehicle, completedStops, savingStops, onComplete }) => (
       ) : <Text style={styles.emptyText}>운행 없음</Text>}
     </View>
 
-    {trip.stops.map((stop) => {
+    {trip.stops.map((stop, stopIndex) => {
       const completionKey = stop.passenger_id;
       const completedAt = completedStops[completionKey];
       const isSaving = Boolean(savingStops[completionKey]);
@@ -56,7 +57,9 @@ const Trip = ({ trip, vehicle, completedStops, savingStops, onComplete }) => (
         <View style={styles.actionColumn}>
           <Pressable
             style={[styles.singleNaviButton, completedAt && styles.disabledAction]}
-            onPress={() => startNavigation(stop)}
+            onPress={() => startNavigation(
+              stop, originForStop({ vehicle, trip, stopIndex, center }),
+            )}
             disabled={Boolean(completedAt)}
           >
             <Text style={styles.singleNaviText}>🚀 내비</Text>
@@ -117,58 +120,55 @@ export default function VehicleResults({
         </View>
 
         <View style={styles.listPane}>
-      {shownVehicles.map((vehicle) => (
-        <View key={vehicle.vehicle_id} style={styles.vehicleCard}>
-          <View style={styles.vehicleHeader}>
-            <View style={{ flex: 1 }}>
-              <View style={styles.nameLine}>
-                <Text style={styles.vehicleName}>{vehicle.vehicle_type}</Text>
-                {vehicle.start_type === 'custom' ? (
-                  <View style={[styles.originBadge, styles.originSelf]}>
-                    <Text style={styles.originSelfText}>🏠 자차 송영</Text>
-                  </View>
-                ) : (
-                  <View style={[styles.originBadge, styles.originCenter]}>
-                    <Text style={styles.originCenterText}>🏫 센터 차량</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={styles.vehicleCapacity}>
-                {vehicle.plate_number} · 정원 {vehicle.capacity}명 · 최대 2회
-                {vehicle.driver_name ? ` · ${vehicle.driver_name} 선생님` : ''}
-              </Text>
-              {vehicle.start_type === 'custom' && !!vehicle.start_address && (
-                <Text style={styles.originAddress}>🏠 1회차 출발: {vehicle.start_address}</Text>
-              )}
+      {shownVehicles.map((vehicle) => {
+        const ack = acks.find((item) => item.vehicle_id === vehicle.vehicle_id);
+        const isSelfDrive = vehicle.start_type === 'custom';
+        const total = (vehicle.trips || [])
+          .filter((trip) => trip.used)
+          .reduce((sum, trip) => sum + trip.stops.length, 0);
 
-              {/* 기사님이 배차표를 봤는지. 안 본 차량이 눈에 띄어야 한다. */}
-              {(() => {
-                const ack = acks.find((item) => item.vehicle_id === vehicle.vehicle_id);
-                return (
-                  <View style={[styles.ackChip, ack ? styles.ackChipDone : styles.ackChipWait]}>
-                    <Text style={[styles.ackChipText, ack ? styles.ackChipTextDone : styles.ackChipTextWait]}>
-                      {ack
-                        ? `✅ 기사님 확인 완료 · ${formatAckTime(ack.acknowledged_at)}`
-                        : '⏳ 기사님 확인 대기 중'}
-                    </Text>
-                  </View>
-                );
-              })()}
-            </View>
-            <View style={styles.vehicleIcon}><Text style={styles.vehicleIconText}>🚐</Text></View>
-          </View>
-          {vehicle.trips.map((trip) => (
-            <Trip
-              key={trip.round}
-              trip={trip}
-              vehicle={vehicle}
-              completedStops={completedStops}
-              savingStops={savingStops}
-              onComplete={onComplete}
-            />
-          ))}
-        </View>
-      ))}
+        // 접힌 줄만 봐도 누가 몇 명을 태우는지, 배차표를 봤는지 알 수 있어야 한다.
+        const summary = [
+          vehicle.plate_number,
+          vehicle.driver_name ? `${vehicle.driver_name} 선생님` : '담당 미지정',
+          `${total}명`,
+        ].join(' · ');
+
+        return (
+          <Accordion
+            key={vehicle.vehicle_id}
+            title={vehicle.vehicle_type}
+            summary={summary}
+            badges={[
+              isSelfDrive
+                ? { label: '🏠 자차 송영', tone: 'warning' }
+                : { label: '🏫 센터 차량', tone: 'success' },
+              ack
+                ? { label: `✅ ${formatAckTime(ack.acknowledged_at)} 확인`, tone: 'success' }
+                : { label: '⏳ 확인 대기', tone: 'default' },
+            ]}
+          >
+            {isSelfDrive && !!vehicle.start_address && (
+              <Text style={styles.originAddress}>🏠 1회차 출발: {vehicle.start_address}</Text>
+            )}
+            <Text style={styles.vehicleCapacity}>
+              정원 {vehicle.capacity}명 · 최대 2회
+            </Text>
+
+            {vehicle.trips.map((trip) => (
+              <Trip
+                key={trip.round}
+                trip={trip}
+                vehicle={vehicle}
+                center={result.center}
+                completedStops={completedStops}
+                savingStops={savingStops}
+                onComplete={onComplete}
+              />
+            ))}
+          </Accordion>
+        );
+      })}
         </View>
       </View>
 
@@ -189,25 +189,8 @@ const styles = StyleSheet.create({
   summaryEyebrow: { color: '#99F6E4', fontWeight: '800', fontSize: 12, marginBottom: 5 },
   summaryTitle: { color: '#FFFFFF', fontWeight: '900', fontSize: 22 },
   summaryCaption: { color: '#CCFBF1', marginTop: 6 },
-  vehicleCard: { backgroundColor: '#FFFFFF', borderRadius: 20, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 16, overflow: 'hidden' },
-  vehicleHeader: { padding: 17, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F8FAFC' },
-  vehicleName: { color: '#0F172A', fontSize: 19, fontWeight: '900' },
   vehicleCapacity: { color: '#64748B', marginTop: 3, fontSize: 12 },
-  nameLine: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  originBadge: { borderRadius: 7, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 3 },
-  originCenter: { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' },
-  originSelf: { backgroundColor: '#FEF3C7', borderColor: '#FCD34D' },
-  originCenterText: { color: '#047857', fontSize: 11, fontWeight: '900' },
-  originSelfText: { color: '#B45309', fontSize: 11, fontWeight: '900' },
   originAddress: { color: '#B45309', fontSize: 12, fontWeight: '700', marginTop: 4, lineHeight: 18 },
-  ackChip: { alignSelf: 'flex-start', borderRadius: 8, borderWidth: 1, paddingHorizontal: 9, paddingVertical: 5, marginTop: 8 },
-  ackChipDone: { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' },
-  ackChipWait: { backgroundColor: '#F1F5F9', borderColor: '#E2E8F0' },
-  ackChipText: { fontSize: 11.5, fontWeight: '800' },
-  ackChipTextDone: { color: '#047857' },
-  ackChipTextWait: { color: '#64748B' },
-  vehicleIcon: { width: 42, height: 42, borderRadius: 13, backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center' },
-  vehicleIconText: { fontSize: 21 },
   trip: { borderTopWidth: 1, borderColor: '#E2E8F0', padding: 15 },
   tripLabel: { color: '#0F766E', fontSize: 14, fontWeight: '900', marginBottom: 10 },
   unusedTrip: { paddingVertical: 12, backgroundColor: '#FAFAFA' },
