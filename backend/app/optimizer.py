@@ -26,6 +26,7 @@ class VehicleSpec:
     vehicle_type: str
     plate_number: str
     driver_name: str | None
+    driver_phone: str | None
     capacity: int
     # 1회차 출발 노드. 0 이면 센터, 그 외는 자차 출발지 노드.
     start_node: int = 0
@@ -168,6 +169,7 @@ def optimize_routes(
                 vehicle_type=vehicle.vehicle_type,
                 plate_number=vehicle.plate_number,
                 driver_name=vehicle.driver_name,
+                driver_phone=vehicle.driver_phone,
                 capacity=vehicle.capacity,
                 start_node=start_node,
             )
@@ -356,6 +358,9 @@ def optimize_routes(
                             address=passenger.address,
                             detail_address=passenger.detail_address,
                             guardian_phone=passenger.guardian_phone,
+                            passenger_phone=passenger.passenger_phone,
+                            primary_contact=passenger.primary_contact,
+                            sms_opt_in=passenger.sms_opt_in,
                             latitude=location.latitude,
                             longitude=location.longitude,
                             wheelchair=passenger.wheelchair,
@@ -387,6 +392,7 @@ def optimize_routes(
                 vehicle_type=vehicle.vehicle_type,
                 plate_number=vehicle.plate_number,
                 driver_name=vehicle.driver_name,
+                driver_phone=vehicle.driver_phone,
                 capacity=vehicle.capacity,
                 start_type="custom" if vehicle.start_node != 0 else "center",
                 start_name=start_location.name,

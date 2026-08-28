@@ -18,6 +18,8 @@ from .supabase_client import get_supabase
 KST = ZoneInfo("Asia/Seoul")
 
 TABLE = "ride_completions"
+# 배차 확정 문자를 누구에게 언제 보냈는지. 같은 동선으로 다시 보내지 않으려고 둔다.
+DISPATCH_SMS_TABLE = "driver_dispatch_sms"
 
 _SCHEMA_HINT = (
     "Supabase에 '{table}' 테이블이 없습니다. "
@@ -110,3 +112,42 @@ def _to_record(row: dict) -> RideCompletionRecord:
         created_at=str(row["created_at"]),
         updated_at=str(row["updated_at"]),
     )
+
+
+# ──────────────────────────────────────────────────────────────
+# 배차 확정 문자 중복 방지
+#
+# 원장님은 조건을 바꿔가며 배차를 여러 번 계산한다. 그때마다 문자가 나가면
+# 요금이 새고 기사님도 지친다. 그래서 기사님별 동선을 지문처럼 남겨두고,
+# 같으면 건너뛴다.
+#
+# 이 테이블이 아직 없어도 서버가 죽으면 안 된다. 없으면 중복 방지만 꺼지고
+# (= 예전처럼 매번 발송) 나머지는 그대로 돈다. init_database 의 필수 목록에
+# 넣지 않은 이유다.
+# ──────────────────────────────────────────────────────────────
+def was_dispatch_sms_sent(service_date: date, vehicle_id: str, signature: str) -> bool:
+    """이미 같은 내용으로 보냈으면 True."""
+    result = (
+        get_supabase()
+        .table(DISPATCH_SMS_TABLE)
+        .select("signature")
+        .eq("service_date", service_date.isoformat())
+        .eq("vehicle_id", vehicle_id)
+        .limit(1)
+        .execute()
+    )
+    rows = result.data or []
+    return bool(rows) and rows[0].get("signature") == signature
+
+
+def mark_dispatch_sms_sent(service_date: date, vehicle_id: str, signature: str) -> None:
+    """보냈다고 기록한다. 같은 날 같은 차량이면 덮어쓴다."""
+    get_supabase().table(DISPATCH_SMS_TABLE).upsert(
+        {
+            "service_date": service_date.isoformat(),
+            "vehicle_id": vehicle_id,
+            "signature": signature,
+            "sent_at": datetime.now(KST).replace(microsecond=0).isoformat(),
+        },
+        on_conflict="service_date,vehicle_id",
+    ).execute()

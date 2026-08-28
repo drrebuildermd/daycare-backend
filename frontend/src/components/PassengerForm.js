@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Pressable,
   StyleSheet,
   Switch,
   Text,
@@ -28,6 +29,10 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
   const attending = value.attending !== false;
   // 백엔드와 같은 기준으로 판정한다. (숫자만 뽑아 10자리 미만이면 발송 건너뜀)
   const hasGuardianPhone = (value.guardianPhone || '').replace(/[^0-9]/g, '').length >= 10;
+  const hasOwnPhone = (value.passengerPhone || '').replace(/[^0-9]/g, '').length >= 10;
+  // 기존 데이터에는 없는 값이다. 알림은 받는 쪽, 전화는 보호자 쪽을 기본으로 본다.
+  const smsOptIn = value.smsOptIn !== false;
+  const callsSelf = value.primaryContact === 'self';
 
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
 
@@ -42,8 +47,12 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
       index={index}
       title={displayName}
       summary={summary}
-      badge={attending ? (hasGuardianPhone ? '출석' : '연락처 없음') : '결석'}
-      badgeTone={attending ? (hasGuardianPhone ? 'success' : 'warning') : 'default'}
+      badges={[
+        attending
+          ? (hasGuardianPhone ? { label: '출석', tone: 'success' } : { label: '연락처 없음', tone: 'warning' })
+          : { label: '결석', tone: 'default' },
+        ...(smsOptIn ? [] : [{ label: '🔕 알림 끔', tone: 'warning' }]),
+      ]}
       tone={attending ? 'default' : 'muted'}
       onRemove={onRemove}
     >
@@ -78,6 +87,60 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
           ⚠️ 번호가 없으면 탑승 완료 문자가 발송되지 않습니다.
         </Text>
       )}
+
+      <Field
+        label="어르신 본인 연락처"
+        value={value.passengerPhone}
+        onChangeText={(text) => set('passengerPhone', text)}
+        placeholder="010-9876-5432 (없으면 비워두세요)"
+        keyboardType="phone-pad"
+      />
+
+      {/* 기사님이 📞 를 눌렀을 때 누구에게 걸지. 어르신마다 다르다. */}
+      <Text style={styles.label}>대표 연락처 (기사님 📞 버튼)</Text>
+      <View style={styles.toggleRow}>
+        <Pressable
+          style={[styles.toggle, !callsSelf && styles.toggleOn]}
+          onPress={() => set('primaryContact', 'guardian')}
+        >
+          <Text style={[styles.toggleText, !callsSelf && styles.toggleTextOn]}>
+            👨‍👩‍👦 보호자
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.toggle, callsSelf && styles.toggleOn]}
+          onPress={() => set('primaryContact', 'self')}
+        >
+          <Text style={[styles.toggleText, callsSelf && styles.toggleTextOn]}>
+            🧑 어르신 본인
+          </Text>
+        </Pressable>
+      </View>
+      {callsSelf && !hasOwnPhone && (
+        <Text style={styles.phoneWarning}>
+          ⚠️ 본인 연락처가 없어 기사님 📞 는 보호자에게 연결됩니다.
+        </Text>
+      )}
+
+      {/* 알림을 원치 않는 보호자가 있다. 명단에서 지우는 대신 여기서 끈다. */}
+      <View style={styles.attendanceRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.attendanceLabel}>
+            {smsOptIn ? '🔔 탑승 완료 알림 보내기' : '🔕 탑승 완료 알림 끔'}
+          </Text>
+          <Text style={styles.switchCaption}>
+            {smsOptIn
+              ? '탑승하시면 보호자에게 문자를 보냅니다.'
+              : '문자를 보내지 않습니다. 탑승 기록은 그대로 남습니다.'}
+          </Text>
+        </View>
+        <Switch
+          value={smsOptIn}
+          onValueChange={(enabled) => set('smsOptIn', enabled)}
+          trackColor={{ false: '#CBD5E1', true: '#A7F3D0' }}
+          thumbColor={smsOptIn ? '#059669' : '#F8FAFC'}
+        />
+      </View>
 
       {/* 개조된 주소 검색 영역 */}
       <View style={{ marginBottom: 15 }}>
@@ -149,6 +212,11 @@ const styles = StyleSheet.create({
   absentLabel: { color: '#64748B' },
   field: { marginBottom: 12 },
   label: { color: '#475569', fontWeight: '700', fontSize: 13, marginBottom: 6 },
+  toggleRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  toggle: { flex: 1, borderRadius: 12, borderWidth: 1.5, borderColor: '#CBD5E1', backgroundColor: '#F8FAFC', paddingVertical: 11, alignItems: 'center' },
+  toggleOn: { borderColor: '#0F766E', backgroundColor: '#ECFDF5' },
+  toggleText: { color: '#64748B', fontSize: 12.5, fontWeight: '800' },
+  toggleTextOn: { color: '#0F766E' },
   phoneWarning: { color: '#B45309', fontSize: 12, fontWeight: '700', marginTop: -6, marginBottom: 12, lineHeight: 17 },
   input: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 12, paddingHorizontal: 13, height: 48, fontSize: 16, color: '#0F172A' },
   timeRow: { flexDirection: 'row', alignItems: 'center' },

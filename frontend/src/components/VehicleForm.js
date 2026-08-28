@@ -17,6 +17,7 @@ export default function VehicleForm({ value, index, onChange, onRemove }) {
 
   const plate = (value.plateNumber || '').trim();
   const driver = (value.driverName || '').trim();
+  const hasDriverPhone = (value.driverPhone || '').replace(/[^0-9]/g, '').length >= 10;
   // 기존 차량 데이터에는 이 값이 없으므로 센터 출발을 기본으로 본다.
   const isCustomStart = value.startType === 'custom';
   const startAddress = (value.startAddress || '').trim();
@@ -33,8 +34,12 @@ export default function VehicleForm({ value, index, onChange, onRemove }) {
       index={index}
       title={`[${(value.vehicleType || '').trim() || '차종 미입력'}]`}
       summary={summary}
-      badge={isCustomStart ? '🏠 자차 송영' : '🏫 센터 차량'}
-      badgeTone={isCustomStart ? 'warning' : 'success'}
+      badges={[
+        isCustomStart
+          ? { label: '🏠 자차 송영', tone: 'warning' }
+          : { label: '🏫 센터 차량', tone: 'success' },
+        ...(hasDriverPhone ? [] : [{ label: '📵 번호 없음', tone: 'warning' }]),
+      ]}
       onRemove={onRemove}
     >
       <Field
@@ -56,6 +61,18 @@ export default function VehicleForm({ value, index, onChange, onRemove }) {
         placeholder="예: 명민승"
         maxLength={30}
       />
+      <Field
+        label="기사님 연락처"
+        value={value.driverPhone}
+        onChangeText={(text) => set('driverPhone', text)}
+        placeholder="010-1234-5678"
+        keyboardType="phone-pad"
+      />
+      <Text style={styles.startHint}>
+        배차를 계산하면 이 번호로 "배차표가 확정되었습니다" 문자가 갑니다.{'\n'}
+        비워두면 문자를 보내지 않습니다.
+      </Text>
+
       <Field
         label="최대 탑승 인원"
         value={value.capacity}

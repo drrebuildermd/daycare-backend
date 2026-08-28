@@ -16,7 +16,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 from app.config import Settings, get_settings
-from app.database import KST, init_database, list_completions, today_kst, upsert_completion
+from app.database import (
+    KST,
+    init_database,
+    list_completions,
+    mark_dispatch_sms_sent,
+    today_kst,
+    upsert_completion,
+    was_dispatch_sms_sent,
+)
 from app.geocoding import resolve_locations
 from app.dispatch import (
     acknowledge_dispatch,
@@ -78,9 +86,18 @@ app.add_middleware(
 )
 
 # ==========================================
-# 🚨 [최종 장착] 1급 기밀(.env) 연동 진짜 보호자 번호 발사 헬퍼 함수
+# 솔라피 문자 발송
+#
+# 보내는 곳이 둘이다. 탑승 완료(보호자에게)와 배차 확정(기사님에게).
+# 인증 로직은 하나만 두고 문구만 갈아끼운다.
 # ==========================================
-def send_test_sms(passenger_name: str, target_number: str, center_name: str):
+def _digits(value: str | None) -> str:
+    """전화번호에서 숫자만 남긴다. 10자리 미만이면 쓸 수 없는 번호로 본다."""
+    return "".join(ch for ch in (value or "") if ch.isdigit())
+
+
+def _solapi_send(target_number: str | None, text: str) -> tuple[bool, str]:
+    """번호 하나에 문자 한 통. 실패해도 예외를 던지지 않고 이유를 돌려준다."""
     settings = get_settings()
     api_key = settings.solapi_api_key
     api_secret = settings.solapi_api_secret
@@ -94,39 +111,38 @@ def send_test_sms(passenger_name: str, target_number: str, center_name: str):
     # 번호가 없거나 형식이 아니면 발송하지 않는다.
     # 예전에는 발신번호(센터 번호)로 대체했는데, 보호자에게 전달된 것처럼
     # 보이면서 실제로는 센터 자기 폰으로만 가는 상태였다.
-    digits = "".join(ch for ch in (target_number or "") if ch.isdigit())
+    digits = _digits(target_number)
     if len(digits) < 10:
-        print(f"[문자 건너뜀] {passenger_name} 어르신의 보호자 번호가 없습니다.")
-        return (False, "보호자 연락처가 없어 발송하지 않았습니다.")
+        return (False, "연락처가 없어 발송하지 않았습니다.")
 
     url = "https://api.solapi.com/messages/v4/send"
-    
+
     date = time.strftime('%Y-%m-%dT%H:%M:%S%z')
     salt = str(uuid.uuid1().hex)
     data = date + salt
-    
+
     signature = hmac.new(
         api_secret.encode('utf-8'),
         data.encode('utf-8'),
         hashlib.sha256
     ).hexdigest()
-    
+
     auth_header = f"HMAC-SHA256 apiKey={api_key}, date={date}, salt={salt}, signature={signature}"
-    
+
     payload = {
         "message": {
             "to": digits,
             "from": sender_number.replace("-", "").strip(),
-            "text": f"[{center_name or '주야간보호센터'}] {passenger_name} 어르신이 무사히 차량에 탑승하셨습니다.",
+            "text": text,
             "type": "SMS"
         }
     }
-    
+
     headers = {
         "Authorization": auth_header,
         "Content-Type": "application/json"
     }
-    
+
     with httpx.Client(timeout=10.0) as client:
         response = client.post(url, json=payload, headers=headers)
     result = response.json()
@@ -138,6 +154,96 @@ def send_test_sms(passenger_name: str, target_number: str, center_name: str):
         return (True, f"발송 접수됨 ({result.get('statusMessage', '').strip()})")
     reason = result.get("errorMessage") or result.get("statusMessage") or response.text[:80]
     return (False, f"솔라피 거절: {result.get('errorCode') or response.status_code} {reason}")
+
+
+def send_test_sms(
+    passenger_name: str,
+    target_number: str,
+    center_name: str,
+    sms_opt_in: bool = True,
+):
+    """탑승 완료를 보호자에게 알린다."""
+    # 알림을 원치 않는 보호자가 있다. 명단에서 지우는 대신 이 스위치로 끈다.
+    if not sms_opt_in:
+        print(f"[문자 건너뜀] {passenger_name} 어르신은 알림 수신이 꺼져 있습니다.")
+        return (False, "보호자가 알림 수신을 꺼두어 발송하지 않았습니다.")
+
+    # 번호가 없으면 아예 부르지 않는다. 예전에는 발신번호(센터 번호)로 대체했는데,
+    # 보호자에게 전달된 것처럼 보이면서 실제로는 센터 자기 폰으로만 가는 상태였다.
+    if len(_digits(target_number)) < 10:
+        print(f"[문자 건너뜀] {passenger_name} 어르신의 보호자 번호가 없습니다.")
+        return (False, "보호자 연락처가 없어 발송하지 않았습니다.")
+
+    return _solapi_send(
+        target_number,
+        f"[{center_name or '주야간보호센터'}] {passenger_name} 어르신이 무사히 차량에 탑승하셨습니다.",
+    )
+def _dispatch_sms_signature(vehicle) -> str:
+    """기사님 한 분의 오늘 동선을 한 줄로 요약한다.
+
+    다시 계산해도 이 값이 같으면 그 기사님에게는 달라진 게 없다는 뜻이다.
+    조건을 바꿔가며 계산할 때마다 문자가 나가면 요금이 새고 기사님도 지친다.
+    """
+    parts = []
+    for trip in vehicle.trips:
+        if not trip.used:
+            continue
+        stops = ">".join(f"{stop.passenger_id}@{stop.estimated_pickup}" for stop in trip.stops)
+        parts.append(f"{trip.round}:{stops}")
+    return "|".join(parts)
+
+
+def _notify_drivers_by_sms(response: OptimizeResponse) -> list[str]:
+    """배차가 확정되면 기사님들께 문자로 알린다.
+
+    동선이 지난번과 같은 기사님은 건너뛴다. 실패해도 배차 결과는 그대로 돌려준다.
+    """
+    center_name = response.center.name or "주야간보호센터"
+    service_date = today_kst()
+    notices: list[str] = []
+    sent_count = 0
+
+    for vehicle in response.vehicles:
+        signature = _dispatch_sms_signature(vehicle)
+        if not signature:
+            continue  # 배정된 어르신이 없는 차량은 알릴 것이 없다
+
+        digits = _digits(vehicle.driver_phone)
+        if len(digits) < 10:
+            notices.append(f"{vehicle.plate_number} 기사님 연락처가 없어 배차 문자를 보내지 못했습니다.")
+            continue
+
+        try:
+            if was_dispatch_sms_sent(service_date, vehicle.vehicle_id, signature):
+                continue
+        except Exception as error:  # noqa: BLE001 - 중복 확인 실패가 배차를 막으면 안 된다
+            print(f"[배차 문자] 중복 확인 실패, 그냥 보냅니다: {error}")
+
+        driver = (vehicle.driver_name or "").strip()
+        try:
+            sent, message = _solapi_send(
+                digits,
+                f"[{center_name}] {driver + ' ' if driver else ''}기사님, "
+                f"오늘 배차표가 확정되었습니다. 앱에서 확인해 주세요.",
+            )
+        except Exception as error:  # noqa: BLE001 - 문자 실패가 배차를 무효화하면 안 된다
+            print(f"[배차 문자 실패] {vehicle.plate_number}: {error}")
+            continue
+
+        if sent:
+            sent_count += 1
+            try:
+                mark_dispatch_sms_sent(service_date, vehicle.vehicle_id, signature)
+            except Exception as error:  # noqa: BLE001
+                # 기록에 실패하면 다음 계산 때 한 번 더 갈 수 있다. 안 가는 것보다 낫다.
+                print(f"[배차 문자] 발송 기록 실패: {error}")
+        else:
+            notices.append(f"{vehicle.plate_number} 기사님 배차 문자 실패: {message}")
+
+    if sent_count:
+        notices.insert(0, f"배차표 확정 문자를 기사님 {sent_count}분께 보냈습니다.")
+    return notices
+
 
 def _archive_passengers(request: OptimizeRequest, resolved) -> None:
     """어르신 명단을 Supabase에 백업한다. 실패해도 배차 결과는 그대로 반환한다."""
@@ -151,6 +257,10 @@ def _archive_passengers(request: OptimizeRequest, resolved) -> None:
             "pickup_start": passenger.pickup_start,
             "pickup_end": passenger.pickup_end,
             "is_wheelchair": passenger.wheelchair,
+            "guardian_phone": passenger.guardian_phone,
+            "passenger_phone": passenger.passenger_phone,
+            "primary_contact": passenger.primary_contact,
+            "is_sms_opt_in": passenger.sms_opt_in,
         }
         for passenger, location in zip(request.passengers, resolved[1:])
     ]
@@ -174,6 +284,7 @@ def _archive_vehicles(request: OptimizeRequest, resolved) -> None:
             "vehicle_type": vehicle.vehicle_type,
             "plate_number": vehicle.plate_number,
             "driver_name": vehicle.driver_name,
+            "driver_phone": vehicle.driver_phone,
             "capacity": vehicle.capacity,
             "start_type": vehicle.start_type,
             "start_address": vehicle.start_address,
@@ -314,6 +425,13 @@ async def run_optimization(
         response.notices.append(f"결석 처리된 {absent_count}명은 배차에서 제외했습니다.")
     _archive_passengers(request, resolved)
     _archive_vehicles(request, resolved)
+
+    # 배차가 확정됐으니 기사님들께 알린다.
+    # 문자가 실패해도 배차 결과는 그대로 돌려준다.
+    try:
+        response.notices.extend(_notify_drivers_by_sms(response))
+    except Exception as error:  # noqa: BLE001
+        print(f"[배차 문자] 전체 실패: {error}")
     return response
 
 
@@ -332,6 +450,7 @@ def create_ride_completion(
             passenger_name=payload.passenger_name,
             target_number=payload.guardian_phone,
             center_name=payload.center_name,
+            sms_opt_in=payload.sms_opt_in,
         )
     except Exception as error:  # noqa: BLE001 - 문자 실패가 탑승 기록을 무효화하면 안 된다
         print(f"[문자 발송 실패] {payload.passenger_name}: {error}")

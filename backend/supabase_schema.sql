@@ -177,3 +177,41 @@ alter table public.passengers add column if not exists detail_address text;
 -- 이 앱에는 로그인이 없어 "우리 앱만 허용"하는 정책을 만들 수 없습니다.
 -- anon 에게 SELECT 를 열면 곧 전체 공개와 같습니다.
 -- 실시간이 필요하면 백엔드 경유 방식으로 다시 만들거나 Supabase Auth 를 붙이세요.
+
+-- ============================================================
+-- v1.4.0 추가분
+-- 이미 만들어 둔 테이블에 칸을 더하는 것이라 몇 번을 실행해도 안전합니다.
+-- ============================================================
+
+-- 1) 탑승 완료 알림을 원치 않는 보호자가 있다. 명단에서 지우는 대신 이 스위치로 끈다.
+alter table public.passengers
+  add column if not exists is_sms_opt_in boolean not null default true;
+
+-- 2) 기사님 📞 버튼이 누구에게 걸지.
+--    'guardian' 이면 보호자, 'self' 면 어르신 본인 번호로 건다.
+alter table public.passengers
+  add column if not exists guardian_phone   text;
+alter table public.passengers
+  add column if not exists passenger_phone  text;
+alter table public.passengers
+  add column if not exists primary_contact  text not null default 'guardian'
+    check (primary_contact in ('guardian', 'self'));
+
+-- 3) 배차가 확정되면 이 번호로 안내 문자를 보낸다.
+alter table public.vehicles
+  add column if not exists driver_phone text;
+
+-- 4) 배차 확정 문자를 누구에게 언제 보냈는지.
+--    원장님은 조건을 바꿔가며 배차를 여러 번 계산한다. 그때마다 문자가 나가면
+--    요금이 새고 기사님도 지친다. 기사님별 동선을 지문(signature)으로 남겨두고
+--    같으면 건너뛴다.
+create table if not exists public.driver_dispatch_sms (
+  id           bigserial primary key,
+  service_date date        not null,
+  vehicle_id   text        not null,
+  signature    text        not null,
+  sent_at      timestamptz not null default now(),
+  constraint driver_dispatch_sms_date_vehicle_key unique (service_date, vehicle_id)
+);
+
+alter table public.driver_dispatch_sms enable row level security;

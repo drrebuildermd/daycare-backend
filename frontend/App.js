@@ -54,6 +54,11 @@ const emptyPassenger = () => ({
   pickupEnd: '08:30',
   wheelchair: false,
   guardianPhone: '', // 🚨 [신규 장착] 보호자 연락처 저장 공간 확보
+  passengerPhone: '',
+  // 기사님 📞 버튼이 누구에게 걸지. 기본은 보호자.
+  primaryContact: 'guardian',
+  // 탑승 완료 문자 수신 여부. 기본은 받음.
+  smsOptIn: true,
   latitude: '',
   longitude: '',
 });
@@ -66,6 +71,7 @@ const emptyVehicle = () => ({
   driverName: '',
   capacity: '4',
   // 자차 송영. 기본은 센터 출발.
+  driverPhone: '',
   startType: 'center',
   startAddress: '',
   startLatitude: '',
@@ -312,6 +318,7 @@ export default function App() {
           vehicle_type: vehicle.vehicleType.trim(),
           plate_number: vehicle.plateNumber.trim(),
           driver_name: (vehicle.driverName || '').trim() || null,
+          driver_phone: (vehicle.driverPhone || '').trim() || null,
           capacity: Number(vehicle.capacity),
           start_type: vehicle.startType === 'custom' ? 'custom' : 'center',
           start_address: (vehicle.startAddress || '').trim() || null,
@@ -329,7 +336,11 @@ export default function App() {
           pickup_start: item.pickupStart,
           pickup_end: item.pickupEnd,
           wheelchair: item.wheelchair,
-          guardian_phone: (item.guardianPhone || '').trim(), // 🚨 [신규 장착] 최적화 시에도 정보 보존
+          guardian_phone: (item.guardianPhone || '').trim(),
+          passenger_phone: (item.passengerPhone || '').trim() || null,
+          // 기존 명단에는 없던 값이다. 없으면 보호자에게 걸고, 알림은 켠 것으로 본다.
+          primary_contact: item.primaryContact === 'self' ? 'self' : 'guardian',
+          sms_opt_in: item.smsOptIn !== false,
         })),
         forbidden_pairs: liveRules.filter((rule) => rule.kind === 'forbidden').map(asRule),
         required_pairs: liveRules.filter((rule) => rule.kind === 'required').map(asRule),
@@ -617,10 +628,9 @@ export default function App() {
                 rules={pairRules}
                 onChange={setPairRules}
               />
-              <Pressable style={[styles.optimizeButton, loading && styles.disabledButton]} onPress={submit} disabled={loading}>
-                {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.optimizeButtonText}>최적 배차 계산하기 →</Text>}
-              </Pressable>
               <Text style={styles.hint}>주소 좌표가 없으면 백엔드의 카카오 REST API 키로 자동 변환합니다.</Text>
+              {/* 계산 버튼이 화면 아래에 떠 있어 그 밑이 가린다. 그만큼 자리를 비운다. */}
+              <View style={styles.fabSpacer} />
             </>
           ) : (
             <>
@@ -676,6 +686,23 @@ export default function App() {
             </>
           )}
         </ScrollView>
+
+        {/* 어르신이 스무 명쯤 되면 계산 버튼까지 스크롤을 한참 내려야 했다.
+            스크롤 위에 띄워 어디서든 바로 누를 수 있게 한다.
+            대상자 탭에서만 보인다. 관제 화면에는 이미 자기 버튼들이 있다. */}
+        {screen === 'input' && (
+          <View style={styles.fabWrap} pointerEvents="box-none">
+            <Pressable
+              style={[styles.fab, loading && styles.disabledButton]}
+              onPress={submit}
+              disabled={loading}
+            >
+              {loading
+                ? <ActivityIndicator color="#FFFFFF" />
+                : <Text style={styles.fabText}>🚐 최적 배차 계산하기</Text>}
+            </Pressable>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -709,6 +736,13 @@ const styles = StyleSheet.create({
   fileName: { color: '#0284C7', fontSize: 11, marginTop: -7, marginBottom: 12 },
   addButton: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#94A3B8', borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginBottom: 14 },
   addButtonText: { color: '#475569', fontWeight: '800' },
+  // 스크롤 위에 떠 있는 계산 버튼.
+  // wrap 은 터치를 통과시키고(box-none) 버튼만 누르게 한다. 안 그러면
+  // 버튼 옆 빈 공간이 스크롤을 먹는다.
+  fabWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 18, paddingBottom: 18, alignItems: 'center' },
+  fab: { width: '100%', maxWidth: 520, backgroundColor: '#0F766E', borderRadius: 999, height: 58, alignItems: 'center', justifyContent: 'center', shadowColor: '#0F172A', shadowOpacity: 0.28, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 8 },
+  fabText: { color: '#FFFFFF', fontSize: 17, fontWeight: '900' },
+  fabSpacer: { height: 86 },
   optimizeButton: { backgroundColor: '#0F766E', borderRadius: 15, height: 56, alignItems: 'center', justifyContent: 'center', shadowColor: '#0F766E', shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 4 },
   nextButton: { backgroundColor: '#0369A1', borderRadius: 15, height: 54, alignItems: 'center', justifyContent: 'center' },
   optimizeButtonText: { color: '#FFFFFF', fontSize: 17, fontWeight: '900' },

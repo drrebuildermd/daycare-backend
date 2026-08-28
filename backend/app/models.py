@@ -46,7 +46,13 @@ class PassengerInput(LocationInput):
     pickup_start: str
     pickup_end: str
     wheelchair: bool = False
-    guardian_phone: str | None = Field(default=None, max_length=20) # 🚨 [신규 장착] 최적화 시 연락처 보존
+    guardian_phone: str | None = Field(default=None, max_length=20)
+    # 어르신 본인 휴대폰. 대표 연락처를 '본인'으로 두면 여기로 전화한다.
+    passenger_phone: str | None = Field(default=None, max_length=20)
+    # 기사님 📞 버튼이 누구에게 걸지. 문자는 이 값과 무관하게 보호자에게 간다.
+    primary_contact: Literal["guardian", "self"] = "guardian"
+    # 알림을 원치 않는 보호자가 있다. 끄면 탑승 완료 문자를 보내지 않는다.
+    sms_opt_in: bool = True
 
     @field_validator("pickup_start", "pickup_end")
     @classmethod
@@ -66,6 +72,8 @@ class VehicleInput(BaseModel):
     vehicle_type: str = Field(min_length=1, max_length=50)
     plate_number: str = Field(min_length=1, max_length=30)
     driver_name: str | None = Field(default=None, max_length=30)
+    # 배차가 확정되면 이 번호로 안내 문자를 보낸다.
+    driver_phone: str | None = Field(default=None, max_length=20)
     capacity: int = Field(ge=1, le=100)
     # 자차 송영: 기사님이 센터가 아니라 자택 등에서 출발하는 경우.
     # 'center' 면 센터에서, 'custom' 이면 start_address 에서 출발한다.
@@ -144,9 +152,12 @@ class StopResult(BaseModel):
     name: str
     address: str
     detail_address: str | None = None
-    # 탑승 완료 문자를 보낼 번호. 기사님 폰에는 어르신 명단이 없으므로
-    # 배차 결과에 실어 보내야 한다.
+    # 기사님 폰에는 어르신 명단이 없다. 문자를 보낼 번호도, 전화를 걸 번호도,
+    # 문자를 보낼지 말지도 모두 배차 결과에 실어 보내야 한다.
     guardian_phone: str | None = None
+    passenger_phone: str | None = None
+    primary_contact: Literal["guardian", "self"] = "guardian"
+    sms_opt_in: bool = True
     latitude: float
     longitude: float
     wheelchair: bool
@@ -171,6 +182,7 @@ class VehicleResult(BaseModel):
     vehicle_type: str
     plate_number: str
     driver_name: str | None = None
+    driver_phone: str | None = None
     capacity: int
     # 1회차 출발지. 자차 송영이면 기사님 자택, 아니면 센터.
     # start_name 은 센터 출발이면 센터명(예: 수주간보호센터)이 들어간다.
@@ -209,6 +221,8 @@ class RideCompletionCreate(BaseModel):
     scheduled_pickup: str
     center_name: str | None = None      # 🚨 [신규 장착] 발송용 센터명
     guardian_phone: str | None = None   # 🚨 [신규 장착] 발송용 보호자 번호
+    # 보호자가 알림을 껐으면 문자를 보내지 않는다.
+    sms_opt_in: bool = True
 
     @field_validator("scheduled_pickup")
     @classmethod

@@ -11,6 +11,7 @@ import {
   fetchTodayDispatch,
   saveRideCompletion,
 } from '../api';
+import { callTargetFor } from '../contacts';
 import { originForStop, startNavigation } from '../navigation';
 import Accordion from '../components/Accordion';
 import RouteMap from '../components/RouteMap';
@@ -116,6 +117,7 @@ export default function DriverScreen({ onExit }) {
         trip_round: tripRound,
         scheduled_pickup: stop.estimated_pickup,
         center_name: dispatch?.center?.name || '',
+        sms_opt_in: stop.sms_opt_in !== false,
         guardian_phone: stop.guardian_phone || '',
       });
       setCompleted((current) => ({ ...current, [stop.passenger_id]: record.completed_at }));
@@ -159,14 +161,14 @@ export default function DriverScreen({ onExit }) {
     originForStop({ vehicle, trip, stopIndex, center: dispatch?.center }),
   );
 
-  const callGuardian = async (stop) => {
-    const digits = (stop.guardian_phone || '').replace(/[^0-9]/g, '');
-    if (digits.length < 10) {
-      Alert.alert('보호자 연락처 없음', `${stop.name} 어르신의 보호자 번호가 등록되어 있지 않습니다.`);
+  const callContact = async (stop) => {
+    const target = callTargetFor(stop);
+    if (!target) {
+      Alert.alert('연락처 없음', `${stop.name} 어르신의 연락처가 등록되어 있지 않습니다.`);
       return;
     }
     try {
-      await Linking.openURL(`tel:${digits}`);
+      await Linking.openURL(`tel:${target.digits}`);
     } catch (_) {
       Alert.alert('전화 연결 실패', '이 기기에서 전화를 걸 수 없습니다.');
     }
@@ -324,7 +326,7 @@ export default function DriverScreen({ onExit }) {
             {trip.stops.map((stop, stopIndex) => {
               const doneAt = completed[stop.passenger_id];
               const isSaving = Boolean(saving[stop.passenger_id]);
-              const hasPhone = (stop.guardian_phone || '').replace(/[^0-9]/g, '').length >= 10;
+              const phoneTarget = callTargetFor(stop);
 
               return (
                 <View
@@ -358,11 +360,11 @@ export default function DriverScreen({ onExit }) {
                     </Pressable>
 
                     <Pressable
-                      style={[styles.action, styles.actionCall, !hasPhone && styles.actionOff]}
-                      onPress={() => callGuardian(stop)}
+                      style={[styles.action, styles.actionCall, !phoneTarget && styles.actionOff]}
+                      onPress={() => callContact(stop)}
                     >
                       <Text style={styles.actionIcon}>📞</Text>
-                      <Text style={styles.actionLabel}>{hasPhone ? '보호자' : '번호없음'}</Text>
+                      <Text style={styles.actionLabel}>{phoneTarget ? phoneTarget.label : '번호없음'}</Text>
                     </Pressable>
 
                     <Pressable
