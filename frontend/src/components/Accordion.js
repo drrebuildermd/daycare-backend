@@ -26,48 +26,58 @@ export default function Accordion({
 }) {
   const [open, setOpen] = useState(defaultOpen);
 
+  // 예전에는 badge 하나만 받았다. 둘 다 받아준다.
+  const shownBadges = (badges && badges.length)
+    ? badges
+    : (badge ? [{ label: badge, tone: badgeTone }] : []);
+
   return (
     <View style={[styles.card, tone === 'muted' && styles.cardMuted]}>
       <Pressable
-        style={styles.headerRow}
+        style={styles.header}
         onPress={() => setOpen((current) => !current)}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
       >
-        {typeof index === 'number' && (
-          <View style={[styles.numberBadge, tone === 'muted' && styles.numberBadgeMuted]}>
-            <Text style={styles.number}>{index + 1}</Text>
-          </View>
-        )}
-
-        <View style={styles.headerText}>
-          <Text
-            style={[styles.title, tone === 'muted' && styles.titleMuted]}
-            numberOfLines={1}
-          >
-            {title}
-          </Text>
-          {!!summary && (
-            <Text style={styles.summary} numberOfLines={1}>{summary}</Text>
+        <View style={styles.headerRow}>
+          {typeof index === 'number' && (
+            <View style={[styles.numberBadge, tone === 'muted' && styles.numberBadgeMuted]}>
+              <Text style={styles.number}>{index + 1}</Text>
+            </View>
           )}
+
+          <View style={styles.headerText}>
+            <Text
+              style={[styles.title, tone === 'muted' && styles.titleMuted]}
+              numberOfLines={1}
+            >
+              {title}
+            </Text>
+            {!!summary && (
+              <Text style={styles.summary} numberOfLines={1}>{summary}</Text>
+            )}
+          </View>
+
+          {/* 펼침 방향을 화살표로 알린다. 접힌 카드가 눌리는 것인지 모르면 아무도 안 누른다. */}
+          <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
         </View>
 
-        {(badges && badges.length
-          ? badges
-          : (badge ? [{ label: badge, tone: badgeTone }] : [])
-        ).map((item) => (
-          <View
-            key={item.label}
-            style={[styles.badge, styles[`badge_${item.tone || 'default'}`]]}
-          >
-            <Text style={[styles.badgeText, styles[`badgeText_${item.tone || 'default'}`]]}>
-              {item.label}
-            </Text>
+        {/* 배지는 아랫줄에 둔다. 윗줄에 같이 두면 배지가 늘어날 때마다
+            차량번호와 기사님 이름이 잘려나간다. */}
+        {shownBadges.length > 0 && (
+          <View style={styles.badgeRow}>
+            {shownBadges.map((item) => (
+              <View
+                key={item.label}
+                style={[styles.badge, styles[`badge_${item.tone || 'default'}`]]}
+              >
+                <Text style={[styles.badgeText, styles[`badgeText_${item.tone || 'default'}`]]}>
+                  {item.label}
+                </Text>
+              </View>
+            ))}
           </View>
-        ))}
-
-        {/* 펼침 방향을 화살표로 알린다. 접힌 카드가 눌리는 것인지 모르면 아무도 안 누른다. */}
-        <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
+        )}
       </Pressable>
 
       {open && (
@@ -87,7 +97,9 @@ export default function Accordion({
 const styles = StyleSheet.create({
   card: { backgroundColor: '#FFFFFF', borderRadius: 16, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0', overflow: 'hidden' },
   cardMuted: { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0' },
-  headerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 13, gap: 8, flexWrap: 'wrap' },
+  header: { paddingHorizontal: 14, paddingVertical: 13 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 9 },
   numberBadge: { width: 26, height: 26, borderRadius: 9, backgroundColor: '#E0F2FE', alignItems: 'center', justifyContent: 'center' },
   numberBadgeMuted: { backgroundColor: '#E2E8F0' },
   number: { color: '#0369A1', fontWeight: '800', fontSize: 12 },

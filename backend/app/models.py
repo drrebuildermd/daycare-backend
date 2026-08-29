@@ -288,6 +288,8 @@ class DispatchNotifyResult(BaseModel):
     sent: int = 0
     failed: int = 0
     outcomes: list[DriverNotifyOutcome] = Field(default_factory=list)
+    # 문자 발송 결과. 푸시(outcomes)와 경로가 달라 따로 담는다.
+    sms_notices: list[str] = Field(default_factory=list)
 
 
 class DispatchToday(BaseModel):

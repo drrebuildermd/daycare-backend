@@ -423,9 +423,16 @@ export default function App() {
       const lines = outcome.outcomes.map(
         (item) => `· ${item.vehicle_label}: ${item.message}`,
       );
+      // 문자는 푸시와 다른 경로로 나간다. 결과도 따로 보여줘야 원장님이
+      // 누가 못 받았는지 알 수 있다.
+      const smsLines = outcome.sms_notices || [];
+      const body = [
+        lines.join('\n') || '전송할 차량이 없습니다.',
+        ...(smsLines.length ? ['', '── 문자 ──', ...smsLines.map((line) => `· ${line}`)] : []),
+      ].join('\n');
       Alert.alert(
         outcome.sent > 0 ? `🚨 ${outcome.sent}대 발송 완료` : '발송된 알림이 없습니다',
-        lines.join('\n') || '전송할 차량이 없습니다.',
+        body,
       );
     } catch (error) {
       Alert.alert('배차 전송 실패', error.message);
@@ -739,10 +746,17 @@ const styles = StyleSheet.create({
   // 스크롤 위에 떠 있는 계산 버튼.
   // wrap 은 터치를 통과시키고(box-none) 버튼만 누르게 한다. 안 그러면
   // 버튼 옆 빈 공간이 스크롤을 먹는다.
-  fabWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 18, paddingBottom: 18, alignItems: 'center' },
+  // 안드로이드는 화면 맨 아래를 시스템 바(뒤로가기·홈)가 차지한다.
+  // 여기 맞춰 띄우지 않으면 버튼이 그 밑에 깔려 눌리지 않는다.
+  fabWrap: {
+    position: 'absolute', left: 0, right: 0, bottom: 0,
+    paddingHorizontal: 18, alignItems: 'center',
+    paddingBottom: Platform.select({ android: 96, ios: 34, default: 24 }),
+  },
   fab: { width: '100%', maxWidth: 520, backgroundColor: '#0F766E', borderRadius: 999, height: 58, alignItems: 'center', justifyContent: 'center', shadowColor: '#0F172A', shadowOpacity: 0.28, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 8 },
   fabText: { color: '#FFFFFF', fontSize: 17, fontWeight: '900' },
-  fabSpacer: { height: 86 },
+  // 버튼이 가리는 만큼 스크롤 끝에 자리를 비운다. 안 그러면 마지막 항목이 가린다.
+  fabSpacer: { height: Platform.select({ android: 168, ios: 106, default: 96 }) },
   optimizeButton: { backgroundColor: '#0F766E', borderRadius: 15, height: 56, alignItems: 'center', justifyContent: 'center', shadowColor: '#0F766E', shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 4 },
   nextButton: { backgroundColor: '#0369A1', borderRadius: 15, height: 54, alignItems: 'center', justifyContent: 'center' },
   optimizeButtonText: { color: '#FFFFFF', fontSize: 17, fontWeight: '900' },

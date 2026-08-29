@@ -159,6 +159,36 @@ check(
 
 
 print()
+print("=== 7. 계산할 때는 안 보내고, 확정할 때만 보낸다 ===")
+
+# 원장님은 조건을 바꿔가며 계산을 여러 번 누른다. 그 단계에서 문자가 나가면
+# 아직 정하지도 않은 배차가 기사님께 통보된다.
+import inspect
+
+optimize_src = inspect.getsource(main.run_optimization)
+check(
+    "배차 계산(/api/optimize)은 문자를 보내지 않음",
+    "_notify_drivers_by_sms" not in optimize_src,
+)
+
+notify_src = inspect.getsource(main.send_dispatch)
+check(
+    "배차 전송(/api/dispatch/notify)이 문자를 보냄",
+    "_notify_drivers_by_sms" in notify_src,
+)
+check(
+    "문자 결과를 응답에 담아 돌려줌",
+    "sms_notices" in notify_src,
+)
+
+from app.models import DispatchNotifyResult
+check(
+    "응답 모델에 sms_notices 칸이 있음",
+    "sms_notices" in DispatchNotifyResult.model_fields,
+)
+
+
+print()
 if failures:
     print(f"실패 {len(failures)}건: {failures}")
     sys.exit(1)
