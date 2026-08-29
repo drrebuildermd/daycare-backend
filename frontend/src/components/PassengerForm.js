@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import TextInput from '../ui/TextInput';
 import Text from '../ui/Text';
 import Icon from '../ui/Icon';
+import { TRIP_OUTBOUND, STAY_HOURS, shiftTime } from '../api';
 import { color } from '../theme';
 import { Pressable, StyleSheet, Switch, View, TouchableOpacity } from 'react-native';
 
@@ -19,7 +20,7 @@ const Field = ({ label, ...props }) => (
   </View>
 );
 
-export default function PassengerForm({ value, index, onChange, onRemove }) {
+export default function PassengerForm({ value, index, onChange, onRemove, tripType }) {
   const set = (field, nextValue) => onChange({ ...value, [field]: nextValue });
   // 명단에는 남기고 배차에서만 빼기 위한 값. 기존 데이터에는 없으므로 기본을 출석으로 본다.
   const attending = value.attending !== false;
@@ -31,6 +32,17 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
   // 아침엔 보호자가 모셔오고 오후엔 센터 차를 타는 분이 있다.
   // 기존 명단에는 이 값이 없으므로 둘 다 탑승으로 본다.
   const attendingOutbound = value.attendingOutbound !== false;
+
+  // 등원을 보고 있으면 픽업 시각을, 하원을 보고 있으면 하차 시각을 고친다.
+  // 한 화면에 네 칸을 다 두면 어느 것이 지금 쓰는 값인지 헷갈린다.
+  const editingOutbound = tripType === TRIP_OUTBOUND;
+  const timeWord = editingOutbound ? '하차' : '픽업';
+  const startKey = editingOutbound ? 'dropoffStart' : 'pickupStart';
+  const endKey = editingOutbound ? 'dropoffEnd' : 'pickupEnd';
+  // 하차 시각을 비워두면 서버가 등원 시각 + 8시간으로 정한다.
+  // 그 값을 미리 보여줘야 원장님이 '비워도 되는구나' 를 안다.
+  const autoStart = editingOutbound ? shiftTime(value.pickupStart) : '';
+  const autoEnd = editingOutbound ? shiftTime(value.pickupEnd) : '';
   const callsSelf = value.primaryContact === 'self';
 
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
@@ -231,13 +243,35 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
       
       <View style={styles.timeRow}>
         <View style={styles.timeField}>
-          <Field label="픽업 하한" value={value.pickupStart} onChangeText={(text) => set('pickupStart', text)} placeholder="08:00" keyboardType="numbers-and-punctuation" maxLength={5} />
+          <Field
+            label={`${timeWord} 하한`}
+            value={value[startKey]}
+            onChangeText={(text) => set(startKey, text)}
+            placeholder={editingOutbound ? (autoStart || '15:30') : '08:00'}
+            keyboardType="numbers-and-punctuation"
+            maxLength={5}
+          />
         </View>
         <Text style={styles.tilde}>~</Text>
         <View style={styles.timeField}>
-          <Field label="픽업 상한" value={value.pickupEnd} onChangeText={(text) => set('pickupEnd', text)} placeholder="08:30" keyboardType="numbers-and-punctuation" maxLength={5} />
+          <Field
+            label={`${timeWord} 상한`}
+            value={value[endKey]}
+            onChangeText={(text) => set(endKey, text)}
+            placeholder={editingOutbound ? (autoEnd || '17:00') : '08:30'}
+            keyboardType="numbers-and-punctuation"
+            maxLength={5}
+          />
         </View>
       </View>
+      {editingOutbound && !(value.dropoffStart || '').trim() && !(value.dropoffEnd || '').trim() && (
+        <Text style={styles.autoHint}>
+          {autoStart
+            ? `비워두면 등원 ${value.pickupStart}~${value.pickupEnd} 에 ${STAY_HOURS}시간을 더해 `
+              + `${autoStart}~${autoEnd} 로 자동 계산됩니다.`
+            : `비워두면 등원 시각에 ${STAY_HOURS}시간을 더해 자동 계산됩니다.`}
+        </Text>
+      )}
       <View style={styles.switchRow}>
         <View>
           <Text style={styles.switchTitle}>휠체어 이용</Text>
@@ -274,6 +308,7 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#F8F9FB', borderWidth: 1, borderColor: '#E4E7EC', borderRadius: 12, paddingHorizontal: 13, height: 48, fontSize: 16, color: '#0D2540' },
   timeRow: { flexDirection: 'row', alignItems: 'center' },
   timeField: { flex: 1 },
+  autoHint: { color: '#07705F', backgroundColor: '#E6F7F4', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 12, lineHeight: 18, marginBottom: 12 },
   tilde: { color: '#667085', fontWeight: '800', marginHorizontal: 9, marginTop: 6 },
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 2 },
   switchTitle: { color: '#0D2540', fontWeight: '700' },

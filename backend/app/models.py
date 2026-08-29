@@ -23,6 +23,11 @@ def parse_hhmm(value: str) -> int:
     return hour * 60 + minute
 
 
+def shift_hhmm(value: str, minutes: int) -> str:
+    """시각을 분 단위로 옮긴다. 자정을 넘기면 23:59 에서 멈춘다."""
+    return format_hhmm(min(parse_hhmm(value) + minutes, 24 * 60 - 1))
+
+
 def format_hhmm(minutes: int) -> str:
     minutes = max(0, int(minutes))
     return f"{minutes // 60:02d}:{minutes % 60:02d}"
@@ -91,11 +96,22 @@ class PassengerInput(LocationInput):
     def is_attending(self, trip_type: str) -> bool:
         return self.attending_outbound if trip_type == "outbound" else self.attending
 
-    def window(self, trip_type: str, default_start: str, default_end: str) -> tuple[str, str]:
-        """이 어르신의 시간창. 하원은 값이 없으면 센터 공통 기본값을 쓴다."""
-        if trip_type == "outbound":
-            return (self.dropoff_start or default_start, self.dropoff_end or default_end)
-        return (self.pickup_start, self.pickup_end)
+    def window(self, trip_type: str, stay_minutes: int) -> tuple[str, str]:
+        """이 어르신의 시간창.
+
+        하원 시각을 따로 적었으면 그것을 쓴다. 비어 있으면 등원 시각에
+        머무시는 시간을 더한다. 주야간보호는 어르신이 8시간을 채우셔야 하므로
+        일찍 오신 분이 일찍 가시고 늦게 오신 분이 늦게 가신다.
+        한 시각으로 묶으면 일찍 오신 분이 8시간을 넘겨 머물게 된다.
+
+        하한과 상한을 따로 본다. 한쪽만 적어둔 경우에도 나머지가 채워진다.
+        """
+        if trip_type != "outbound":
+            return (self.pickup_start, self.pickup_end)
+        return (
+            self.dropoff_start or shift_hhmm(self.pickup_start, stay_minutes),
+            self.dropoff_end or shift_hhmm(self.pickup_end, stay_minutes),
+        )
 
 
 class VehicleInput(BaseModel):

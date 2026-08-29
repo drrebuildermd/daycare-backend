@@ -110,24 +110,54 @@ for trip in result.vehicles[0].trips:
 
 
 print()
-print("=== 5. 하원 시간창은 센터 공통 기본값을 쓴다 ===")
+print("=== 5. 하원 시각은 등원 + 머무는 시간(8시간)으로 정한다 ===")
+
+from app.models import PassengerInput, shift_hhmm
 
 settings = get_settings()
-result = build("outbound", capacity=7)
-stops = [s for t in result.vehicles[0].trips if t.used for s in t.stops]
-want = f"{settings.dropoff_window_start}~{settings.dropoff_window_end}"
-check("요청 시간창이 하원 기본값", all(s.requested_window == want for s in stops),
-      {s.name: s.requested_window for s in stops})
-check("도착 예정 시각이 그 창 안에",
-      all(settings.dropoff_window_start <= s.estimated_pickup <= settings.dropoff_window_end
-          for s in stops),
-      {s.name: s.estimated_pickup for s in stops})
+stay = round(settings.stay_hours * 60)
+check("머무는 시간이 8시간", settings.stay_hours == 8.0, settings.stay_hours)
 
-# 어르신이 직접 하원 시각을 지정하면 그 값을 쓴다.
-result = build("outbound", dropoff_start="16:00", dropoff_end="16:30")
+
+def window_of(pickup_start, pickup_end, **extra):
+    person = PassengerInput.model_validate({
+        "name": "김", "address": "주소", "latitude": 37.5, "longitude": 127.0,
+        "pickup_start": pickup_start, "pickup_end": pickup_end, **extra,
+    })
+    return person.window("outbound", stay)
+
+
+# 일찍 오신 분이 일찍 가셔야 한다. 한 시각으로 묶으면 8시간을 넘겨 머물게 된다.
+check("07:30 등원 -> 15:30 하원", window_of("07:30", "08:00") == ("15:30", "16:00"),
+      window_of("07:30", "08:00"))
+check("08:30 등원 -> 16:30 하원", window_of("08:30", "09:00") == ("16:30", "17:00"),
+      window_of("08:30", "09:00"))
+check("10:00 등원 -> 18:00 하원", window_of("10:00", "10:30") == ("18:00", "18:30"),
+      window_of("10:00", "10:30"))
+check("어르신마다 하원 시각이 다르다",
+      window_of("07:30", "08:00") != window_of("10:00", "10:30"))
+
+# 직접 적었으면 그 값이 이긴다.
+check("지정한 하원 시각이 우선",
+      window_of("08:30", "09:00", dropoff_start="15:00", dropoff_end="15:30")
+      == ("15:00", "15:30"))
+# 한쪽만 적어도 나머지는 채워진다.
+check("하한만 적으면 상한은 자동",
+      window_of("08:30", "09:00", dropoff_start="15:00") == ("15:00", "17:00"),
+      window_of("08:30", "09:00", dropoff_start="15:00"))
+# 자정을 넘기면 멈춘다.
+check("자정을 넘기지 않는다", window_of("17:00", "18:00") == ("23:59", "23:59"),
+      window_of("17:00", "18:00"))
+
+# 배차 결과에도 그 값이 실린다.
+result = build("outbound")
 stops = [s for t in result.vehicles[0].trips if t.used for s in t.stops]
-check("지정한 하원 시각이 우선", all(s.requested_window == "16:00~16:30" for s in stops),
+check("결과의 요청 시간창이 8시간 뒤",
+      all(s.requested_window == "16:00~17:30" for s in stops),
       {s.name: s.requested_window for s in stops})
+check("도착 예정이 그 창 안에",
+      all("16:00" <= s.estimated_pickup <= "17:30" for s in stops),
+      {s.name: s.estimated_pickup for s in stops})
 
 # 등원은 여전히 픽업 시간창이다.
 result = build("inbound")

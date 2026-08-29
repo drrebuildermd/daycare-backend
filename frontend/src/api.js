@@ -42,6 +42,19 @@ export const guessTripType = (now = new Date()) =>
 export const tripLabel = (tripType) =>
   (tripType === TRIP_OUTBOUND ? '하원' : '등원');
 
+// 어르신이 센터에 머무시는 시간. 백엔드의 stay_hours 와 같은 값이어야 한다.
+// 화면은 '이렇게 계산됩니다' 를 미리 보여주기만 하고, 실제 계산은 서버가 한다.
+export const STAY_HOURS = 8;
+
+/** 'HH:MM' 에 시간을 더한다. 자정을 넘기면 23:59 에서 멈춘다. */
+export const shiftTime = (value, hours = STAY_HOURS) => {
+  const match = /^(\d{1,2}):(\d{2})$/.exec((value || '').trim());
+  if (!match) return '';
+  const total = Number(match[1]) * 60 + Number(match[2]) + hours * 60;
+  const capped = Math.min(total, 24 * 60 - 1);
+  return `${String(Math.floor(capped / 60)).padStart(2, '0')}:${String(capped % 60).padStart(2, '0')}`;
+};
+
 export const fetchTodayCompletions = (tripType) =>
   request(`/api/ride-completions/today${tripType ? `?trip_type=${tripType}` : ''}`);
 // 송영 일지는 등원과 하원을 함께 내려받는다. 하루치를 한 장으로 봐야 한다.

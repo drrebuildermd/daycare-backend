@@ -178,6 +178,8 @@ def optimize_routes(
 ) -> OptimizeResponse:
     started = time.perf_counter()
     trip_type = request.trip_type
+    # 하원 시각을 안 적은 어르신은 등원 시각 + 머무는 시간으로 계산한다.
+    stay_minutes = round(settings.stay_hours * 60)
     passenger_count = len(request.passengers)
     # 자차 출발지는 어르신 노드 뒤에 순서대로 붙어 있다.
     # main.py 가 [센터, *어르신, *커스텀출발지] 순으로 지오코딩해 넘긴다.
@@ -269,9 +271,7 @@ def optimize_routes(
 
     for node, passenger in enumerate(request.passengers, start=1):
         index = manager.NodeToIndex(node)
-        window_start, window_end = passenger.window(
-            trip_type, settings.dropoff_window_start, settings.dropoff_window_end
-        )
+        window_start, window_end = passenger.window(trip_type, stay_minutes)
         time_dimension.CumulVar(index).SetRange(
             parse_hhmm(window_start), parse_hhmm(window_end)
         )
@@ -401,11 +401,7 @@ def optimize_routes(
                             longitude=location.longitude,
                             wheelchair=passenger.wheelchair,
                             requested_window="{}~{}".format(
-                                *passenger.window(
-                                    trip_type,
-                                    settings.dropoff_window_start,
-                                    settings.dropoff_window_end,
-                                )
+                                *passenger.window(trip_type, stay_minutes)
                             ),
                             estimated_pickup=format_hhmm(pickup_minute),
                             kakao_navi_url=_kakao_navi_url(location),

@@ -62,6 +62,9 @@ const emptyPassenger = () => ({
   attendingOutbound: true,
   pickupStart: '08:00',
   pickupEnd: '08:30',
+  // 비워두면 서버가 등원 시각 + 머무는 시간(8시간)으로 정한다.
+  dropoffStart: '',
+  dropoffEnd: '',
   wheelchair: false,
   guardianPhone: '', // 🚨 [신규 장착] 보호자 연락처 저장 공간 확보
   passengerPhone: '',
@@ -389,6 +392,8 @@ function AdminApp() {
           pickup_start: item.pickupStart,
           pickup_end: item.pickupEnd,
           wheelchair: item.wheelchair,
+          dropoff_start: (item.dropoffStart || '').trim() || null,
+          dropoff_end: (item.dropoffEnd || '').trim() || null,
           guardian_phone: (item.guardianPhone || '').trim(),
           passenger_phone: (item.passengerPhone || '').trim() || null,
           // 기존 명단에는 없던 값이다. 없으면 보호자에게 걸고, 알림은 켠 것으로 본다.
@@ -658,7 +663,11 @@ function AdminApp() {
           ) : screen === 'input' ? (
             <>
               <Text style={styles.sectionTitle}>센터 정보</Text>
-              <Text style={styles.sectionCaption}>모든 차량은 센터에서 출발하고 센터로 복귀합니다.</Text>
+              {/* v2.0 부터 자차 송영의 마지막 회차는 센터가 아니라 기사님 자택에서 끝난다.
+                  '모두 센터로 복귀' 는 이제 틀린 말이다. */}
+              <Text style={styles.sectionCaption}>
+                자차 송영 차량의 마지막 회차는 기사님 자택(차고지)으로 퇴근하도록 자동 최적화됩니다.
+              </Text>
               <View style={styles.centerCard}>
                 <Text style={styles.inputLabel}>센터명</Text>
                 <TextInput style={styles.input} value={center.name} onChangeText={(text) => setCenter({ ...center, name: text })} placeholder="센터명" />
@@ -700,6 +709,7 @@ function AdminApp() {
                   key={passenger.localId}
                   value={passenger}
                   index={index}
+                  tripType={tripType}
                   onChange={(next) => updatePassenger(index, next)}
                   onRemove={() => setPassengers((current) => current.filter((_, itemIndex) => itemIndex !== index))}
                 />
