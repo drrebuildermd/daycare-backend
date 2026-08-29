@@ -1,5 +1,6 @@
 import React from 'react';
-import { Modal, Text, TouchableOpacity, View } from 'react-native';
+import Text from '../ui/Text';
+import { Modal, TouchableOpacity, View } from 'react-native';
 import DaumPostcode from 'react-daum-postcode';
 
 // 웹 전용. react-daum-postcode는 내부적으로 document/window를 쓰므로
@@ -12,8 +13,8 @@ export default function AddressSearch({ visible, onSelected, onClose }) {
           onComplete={(data) => onSelected(data.roadAddress || data.address)}
           autoClose={false}
         />
-        <TouchableOpacity style={{ padding: 20, backgroundColor: '#fee2e2' }} onPress={onClose}>
-          <Text style={{ textAlign: 'center', color: '#b91c1c', fontWeight: 'bold' }}>닫기</Text>
+        <TouchableOpacity style={{ padding: 20, backgroundColor: '#FCEDED' }} onPress={onClose}>
+          <Text style={{ textAlign: 'center', color: '#9B2C2C', fontWeight: 'bold' }}>닫기</Text>
         </TouchableOpacity>
       </View>
     </Modal>

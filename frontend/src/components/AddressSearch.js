@@ -1,5 +1,6 @@
 import React from 'react';
-import { ActivityIndicator, Modal, Text, TouchableOpacity, View } from 'react-native';
+import Text from '../ui/Text';
+import { ActivityIndicator, Modal, TouchableOpacity, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 // 네이티브(iOS/Android) 전용.
@@ -47,12 +48,12 @@ export default function AddressSearch({ visible, onSelected, onClose }) {
           startInLoadingState
           renderLoading={() => (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-              <ActivityIndicator color="#0F766E" />
+              <ActivityIndicator color="#0BA38E" />
             </View>
           )}
         />
-        <TouchableOpacity style={{ padding: 20, backgroundColor: '#fee2e2' }} onPress={onClose}>
-          <Text style={{ textAlign: 'center', color: '#b91c1c', fontWeight: 'bold' }}>닫기</Text>
+        <TouchableOpacity style={{ padding: 20, backgroundColor: '#FCEDED' }} onPress={onClose}>
+          <Text style={{ textAlign: 'center', color: '#9B2C2C', fontWeight: 'bold' }}>닫기</Text>
         </TouchableOpacity>
       </View>
     </Modal>

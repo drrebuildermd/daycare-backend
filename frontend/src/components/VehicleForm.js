@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import Text from '../ui/Text';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import Accordion from './Accordion';
 import AddressSearch from './AddressSearch';
@@ -7,7 +8,7 @@ import AddressSearch from './AddressSearch';
 const Field = ({ label, ...props }) => (
   <View style={styles.field}>
     <Text style={styles.label}>{label}</Text>
-    <TextInput style={styles.input} placeholderTextColor="#94A3B8" {...props} />
+    <TextInput style={styles.input} placeholderTextColor="#98A2B3" {...props} />
   </View>
 );
 
@@ -150,17 +151,17 @@ export default function VehicleForm({ value, index, onChange, onRemove }) {
 
 const styles = StyleSheet.create({
   field: { marginBottom: 12 },
-  label: { color: '#475569', fontWeight: '700', fontSize: 13, marginBottom: 6 },
-  input: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 12, paddingHorizontal: 13, height: 48, fontSize: 16, color: '#0F172A' },
+  label: { color: '#667085', fontWeight: '700', fontSize: 13, marginBottom: 6 },
+  input: { backgroundColor: '#F8F9FB', borderWidth: 1, borderColor: '#E4E7EC', borderRadius: 12, paddingHorizontal: 13, height: 48, fontSize: 16, color: '#0D2540' },
   toggleRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
-  toggle: { flex: 1, borderRadius: 12, borderWidth: 1.5, borderColor: '#CBD5E1', backgroundColor: '#F8FAFC', paddingVertical: 11, alignItems: 'center' },
-  toggleOn: { borderColor: '#0F766E', backgroundColor: '#ECFDF5' },
-  toggleText: { color: '#64748B', fontSize: 12.5, fontWeight: '800' },
-  toggleTextOn: { color: '#0F766E' },
-  startBox: { backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FCD34D', borderRadius: 12, padding: 12, gap: 8 },
-  searchButton: { backgroundColor: '#0F766E', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  toggle: { flex: 1, borderRadius: 12, borderWidth: 1.5, borderColor: '#E4E7EC', backgroundColor: '#F8F9FB', paddingVertical: 11, alignItems: 'center' },
+  toggleOn: { borderColor: '#0BA38E', backgroundColor: '#E9F7EF' },
+  toggleText: { color: '#667085', fontSize: 12.5, fontWeight: '800' },
+  toggleTextOn: { color: '#0BA38E' },
+  startBox: { backgroundColor: '#FEF6E7', borderWidth: 1, borderColor: '#F2B84B', borderRadius: 12, padding: 12, gap: 8 },
+  searchButton: { backgroundColor: '#0BA38E', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
   searchButtonText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
-  startAddress: { color: '#0F172A', fontSize: 14, fontWeight: '700', backgroundColor: '#FFFFFF', borderRadius: 8, padding: 10 },
-  startWarning: { color: '#B45309', fontSize: 12.5, fontWeight: '700' },
-  startHint: { color: '#64748B', fontSize: 12, lineHeight: 18 },
+  startAddress: { color: '#0D2540', fontSize: 14, fontWeight: '700', backgroundColor: '#FFFFFF', borderRadius: 8, padding: 10 },
+  startWarning: { color: '#8A6100', fontSize: 12.5, fontWeight: '700' },
+  startHint: { color: '#667085', fontSize: 12, lineHeight: 18 },
 });

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Text from '../ui/Text';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 /**
  * 접기/펼치기 카드.
@@ -95,28 +96,28 @@ export default function Accordion({
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: '#FFFFFF', borderRadius: 16, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0', overflow: 'hidden' },
-  cardMuted: { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0' },
+  card: { backgroundColor: '#FFFFFF', borderRadius: 16, marginBottom: 10, borderWidth: 1, borderColor: '#E4E7EC', overflow: 'hidden' },
+  cardMuted: { backgroundColor: '#F8F9FB', borderColor: '#E4E7EC' },
   header: { paddingHorizontal: 14, paddingVertical: 13 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 9 },
-  numberBadge: { width: 26, height: 26, borderRadius: 9, backgroundColor: '#E0F2FE', alignItems: 'center', justifyContent: 'center' },
-  numberBadgeMuted: { backgroundColor: '#E2E8F0' },
-  number: { color: '#0369A1', fontWeight: '800', fontSize: 12 },
+  numberBadge: { width: 26, height: 26, borderRadius: 9, backgroundColor: '#E6F7F4', alignItems: 'center', justifyContent: 'center' },
+  numberBadgeMuted: { backgroundColor: '#E4E7EC' },
+  number: { color: '#07705F', fontWeight: '800', fontSize: 12 },
   headerText: { flex: 1, minWidth: 0 },
-  title: { color: '#0F172A', fontSize: 15, fontWeight: '800' },
-  titleMuted: { color: '#94A3B8', textDecorationLine: 'line-through' },
-  summary: { color: '#64748B', fontSize: 12, marginTop: 2 },
+  title: { color: '#0D2540', fontSize: 15, fontWeight: '800' },
+  titleMuted: { color: '#98A2B3', textDecorationLine: 'line-through' },
+  summary: { color: '#667085', fontSize: 12, marginTop: 2 },
   badge: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
-  badge_default: { backgroundColor: '#F1F5F9' },
-  badge_success: { backgroundColor: '#ECFDF5' },
-  badge_warning: { backgroundColor: '#FEF3C7' },
+  badge_default: { backgroundColor: '#F2F4F7' },
+  badge_success: { backgroundColor: '#E9F7EF' },
+  badge_warning: { backgroundColor: '#FEF6E7' },
   badgeText: { fontSize: 11, fontWeight: '800' },
-  badgeText_default: { color: '#64748B' },
-  badgeText_success: { color: '#047857' },
-  badgeText_warning: { color: '#B45309' },
-  chevron: { color: '#94A3B8', fontSize: 11, fontWeight: '900' },
-  body: { paddingHorizontal: 14, paddingBottom: 14, borderTopWidth: 1, borderColor: '#F1F5F9', paddingTop: 14 },
+  badgeText_default: { color: '#667085' },
+  badgeText_success: { color: '#237B4B' },
+  badgeText_warning: { color: '#8A6100' },
+  chevron: { color: '#98A2B3', fontSize: 11, fontWeight: '900' },
+  body: { paddingHorizontal: 14, paddingBottom: 14, borderTopWidth: 1, borderColor: '#F2F4F7', paddingTop: 14 },
   removeButton: { alignSelf: 'flex-end', paddingHorizontal: 12, paddingVertical: 7 },
-  removeText: { color: '#DC2626', fontWeight: '700', fontSize: 13 },
+  removeText: { color: '#D64545', fontWeight: '700', fontSize: 13 },
 });

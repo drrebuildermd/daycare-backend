@@ -1,13 +1,6 @@
 import React, { useState } from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-  TouchableOpacity
-} from 'react-native';
+import Text from '../ui/Text';
+import { Pressable, StyleSheet, Switch, TextInput, View, TouchableOpacity } from 'react-native';
 
 import AddressSearch from './AddressSearch';
 import Accordion from './Accordion';
@@ -17,7 +10,7 @@ const Field = ({ label, ...props }) => (
     <Text style={styles.label}>{label}</Text>
     <TextInput
       style={styles.input}
-      placeholderTextColor="#94A3B8"
+      placeholderTextColor="#98A2B3"
       {...props}
     />
   </View>
@@ -68,8 +61,8 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
         <Switch
           value={attending}
           onValueChange={(enabled) => set('attending', enabled)}
-          trackColor={{ false: '#CBD5E1', true: '#A7F3D0' }}
-          thumbColor={attending ? '#059669' : '#F8FAFC'}
+          trackColor={{ false: '#E4E7EC', true: '#6ED6C1' }}
+          thumbColor={attending ? '#3BB273' : '#F8F9FB'}
         />
       </View>
       <Field label="어르신 이름" value={value.name} onChangeText={(text) => set('name', text)} placeholder="홍길동" />
@@ -137,8 +130,8 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
         <Switch
           value={smsOptIn}
           onValueChange={(enabled) => set('smsOptIn', enabled)}
-          trackColor={{ false: '#CBD5E1', true: '#A7F3D0' }}
-          thumbColor={smsOptIn ? '#059669' : '#F8FAFC'}
+          trackColor={{ false: '#E4E7EC', true: '#6ED6C1' }}
+          thumbColor={smsOptIn ? '#3BB273' : '#F8F9FB'}
         />
       </View>
 
@@ -146,7 +139,7 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
       <View style={{ marginBottom: 15 }}>
         <Text style={styles.label}>주소</Text>
         <TouchableOpacity 
-          style={{ backgroundColor: '#0f766e', padding: 12, borderRadius: 8, marginTop: 5 }}
+          style={{ backgroundColor: '#0BA38E', padding: 12, borderRadius: 8, marginTop: 5 }}
           onPress={() => setIsAddressModalOpen(true)}
         >
           <Text style={{ color: 'white', textAlign: 'center', fontWeight: 'bold' }}>
@@ -157,7 +150,7 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
         {/* 검색 완료된 주소가 표시되는 곳 */}
         {value.address ? (
           <View>
-            <Text style={{ marginTop: 8, marginBottom: 8, color: '#374151', fontSize: 15, padding: 5, backgroundColor: '#f3f4f6' }}>
+            <Text style={{ marginTop: 8, marginBottom: 8, color: '#667085', fontSize: 15, padding: 5, backgroundColor: '#F2F4F7' }}>
               {value.address}
             </Text>
             {/* 🎯 상세 주소 입력칸 추가 */}
@@ -198,8 +191,8 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
         <Switch
           value={value.wheelchair}
           onValueChange={(enabled) => set('wheelchair', enabled)}
-          trackColor={{ false: '#CBD5E1', true: '#A7F3D0' }}
-          thumbColor={value.wheelchair ? '#059669' : '#F8FAFC'}
+          trackColor={{ false: '#E4E7EC', true: '#6ED6C1' }}
+          thumbColor={value.wheelchair ? '#3BB273' : '#F8F9FB'}
         />
       </View>
     </Accordion>
@@ -207,22 +200,22 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
 }
 
 const styles = StyleSheet.create({
-  attendanceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 12, padding: 12, marginBottom: 14 },
-  attendanceLabel: { color: '#047857', fontWeight: '800', fontSize: 14 },
-  absentLabel: { color: '#64748B' },
+  attendanceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F8F9FB', borderRadius: 12, padding: 12, marginBottom: 14 },
+  attendanceLabel: { color: '#237B4B', fontWeight: '800', fontSize: 14 },
+  absentLabel: { color: '#667085' },
   field: { marginBottom: 12 },
-  label: { color: '#475569', fontWeight: '700', fontSize: 13, marginBottom: 6 },
+  label: { color: '#667085', fontWeight: '700', fontSize: 13, marginBottom: 6 },
   toggleRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
-  toggle: { flex: 1, borderRadius: 12, borderWidth: 1.5, borderColor: '#CBD5E1', backgroundColor: '#F8FAFC', paddingVertical: 11, alignItems: 'center' },
-  toggleOn: { borderColor: '#0F766E', backgroundColor: '#ECFDF5' },
-  toggleText: { color: '#64748B', fontSize: 12.5, fontWeight: '800' },
-  toggleTextOn: { color: '#0F766E' },
-  phoneWarning: { color: '#B45309', fontSize: 12, fontWeight: '700', marginTop: -6, marginBottom: 12, lineHeight: 17 },
-  input: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 12, paddingHorizontal: 13, height: 48, fontSize: 16, color: '#0F172A' },
+  toggle: { flex: 1, borderRadius: 12, borderWidth: 1.5, borderColor: '#E4E7EC', backgroundColor: '#F8F9FB', paddingVertical: 11, alignItems: 'center' },
+  toggleOn: { borderColor: '#0BA38E', backgroundColor: '#E9F7EF' },
+  toggleText: { color: '#667085', fontSize: 12.5, fontWeight: '800' },
+  toggleTextOn: { color: '#0BA38E' },
+  phoneWarning: { color: '#8A6100', fontSize: 12, fontWeight: '700', marginTop: -6, marginBottom: 12, lineHeight: 17 },
+  input: { backgroundColor: '#F8F9FB', borderWidth: 1, borderColor: '#E4E7EC', borderRadius: 12, paddingHorizontal: 13, height: 48, fontSize: 16, color: '#0D2540' },
   timeRow: { flexDirection: 'row', alignItems: 'center' },
   timeField: { flex: 1 },
-  tilde: { color: '#64748B', fontWeight: '800', marginHorizontal: 9, marginTop: 6 },
+  tilde: { color: '#667085', fontWeight: '800', marginHorizontal: 9, marginTop: 6 },
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 2 },
-  switchTitle: { color: '#1E293B', fontWeight: '700' },
-  switchCaption: { color: '#94A3B8', fontSize: 12, marginTop: 2 },
+  switchTitle: { color: '#0D2540', fontWeight: '700' },
+  switchCaption: { color: '#98A2B3', fontSize: 12, marginTop: 2 },
 });

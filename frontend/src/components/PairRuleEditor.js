@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Text from '../ui/Text';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 // 동승 규칙 편집기.
 // forbidden = 같은 차·같은 회차에 함께 태우면 안 되는 조합 (기피)
@@ -135,27 +136,27 @@ export default function PairRuleEditor({ passengers, rules, onChange }) {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#E2E8F0' },
-  title: { color: '#0F172A', fontSize: 16, fontWeight: '900' },
-  caption: { color: '#64748B', fontSize: 12, marginTop: 3, marginBottom: 12 },
-  empty: { color: '#94A3B8', fontSize: 12.5, marginTop: 8, lineHeight: 19 },
-  kindRow: { flexDirection: 'row', backgroundColor: '#F1F5F9', borderRadius: 12, padding: 4, marginBottom: 14 },
+  card: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#E4E7EC' },
+  title: { color: '#0D2540', fontSize: 16, fontWeight: '900' },
+  caption: { color: '#667085', fontSize: 12, marginTop: 3, marginBottom: 12 },
+  empty: { color: '#98A2B3', fontSize: 12.5, marginTop: 8, lineHeight: 19 },
+  kindRow: { flexDirection: 'row', backgroundColor: '#F2F4F7', borderRadius: 12, padding: 4, marginBottom: 14 },
   kindTab: { flex: 1, paddingVertical: 9, alignItems: 'center', borderRadius: 9 },
   kindTabActive: { backgroundColor: '#FFFFFF' },
-  kindText: { color: '#64748B', fontSize: 13, fontWeight: '800' },
-  kindTextActive: { color: '#0F766E' },
-  pickLabel: { color: '#475569', fontWeight: '700', fontSize: 13, marginBottom: 8 },
+  kindText: { color: '#667085', fontSize: 13, fontWeight: '800' },
+  kindTextActive: { color: '#0BA38E' },
+  pickLabel: { color: '#667085', fontWeight: '700', fontSize: 13, marginBottom: 8 },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginBottom: 12 },
-  chip: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 999, paddingHorizontal: 13, paddingVertical: 8 },
-  chipPicked: { backgroundColor: '#0F766E', borderColor: '#0F766E' },
-  chipText: { color: '#334155', fontSize: 13, fontWeight: '700' },
+  chip: { backgroundColor: '#F8F9FB', borderWidth: 1, borderColor: '#E4E7EC', borderRadius: 999, paddingHorizontal: 13, paddingVertical: 8 },
+  chipPicked: { backgroundColor: '#0BA38E', borderColor: '#0BA38E' },
+  chipText: { color: '#0D2540', fontSize: 13, fontWeight: '700' },
   chipTextPicked: { color: '#FFFFFF' },
-  addButton: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#0F766E', borderRadius: 12, paddingVertical: 11, alignItems: 'center' },
-  addButtonOff: { borderColor: '#CBD5E1', opacity: 0.5 },
-  addButtonText: { color: '#0F766E', fontWeight: '800', fontSize: 13 },
-  ruleList: { marginTop: 14, borderTopWidth: 1, borderColor: '#E2E8F0', paddingTop: 12, gap: 8 },
-  ruleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F8FAFC', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
-  ruleText: { color: '#0F172A', fontSize: 13, fontWeight: '700', flexShrink: 1 },
-  ruleTextStale: { color: '#B45309' },
-  ruleRemove: { color: '#DC2626', fontWeight: '700', fontSize: 12, marginLeft: 10 },
+  addButton: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#0BA38E', borderRadius: 12, paddingVertical: 11, alignItems: 'center' },
+  addButtonOff: { borderColor: '#E4E7EC', opacity: 0.5 },
+  addButtonText: { color: '#0BA38E', fontWeight: '800', fontSize: 13 },
+  ruleList: { marginTop: 14, borderTopWidth: 1, borderColor: '#E4E7EC', paddingTop: 12, gap: 8 },
+  ruleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F8F9FB', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
+  ruleText: { color: '#0D2540', fontSize: 13, fontWeight: '700', flexShrink: 1 },
+  ruleTextStale: { color: '#8A6100' },
+  ruleRemove: { color: '#D64545', fontWeight: '700', fontSize: 12, marginLeft: 10 },
 });

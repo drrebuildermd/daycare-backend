@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Text from '../ui/Text';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 // 지도 SDK는 지오코딩용 REST 키가 아니라 '자바스크립트 앱 키'를 쓴다. (별개의 키)
 const KAKAO_JS_KEY = process.env.EXPO_PUBLIC_KAKAO_JS_KEY || '';
 
 // 차량별 동선 색상. 차량이 더 많으면 순환한다.
-const ROUTE_COLORS = ['#0F766E', '#1D4ED8', '#B91C1C', '#B45309', '#7E22CE', '#0369A1'];
+const ROUTE_COLORS = ['#0BA38E', '#0BA38E', '#9B2C2C', '#8A6100', '#07705F', '#07705F'];
 
 const MAP_CANVAS_CLASS = 'songyoung-map-canvas';
 
@@ -17,7 +18,7 @@ const injectMapCss = () => {
   const style = document.createElement('style');
   style.id = id;
   style.textContent = `
-    .${MAP_CANVAS_CLASS} { width: 100%; height: 340px; background: #E2E8F0; }
+    .${MAP_CANVAS_CLASS} { width: 100%; height: 340px; background: #E4E7EC; }
     @media (min-width: 1024px) { .${MAP_CANVAS_CLASS} { height: 620px; } }
   `;
   document.head.appendChild(style);
@@ -59,7 +60,7 @@ const centerMarkerHtml = `
   <div style="
     transform: translate(-50%, -50%);
     padding: 5px 11px; border-radius: 8px;
-    background: #0F172A; border: 2.5px solid #FFFFFF;
+    background: #0D2540; border: 2.5px solid #FFFFFF;
     box-shadow: 0 2px 8px rgba(15,23,42,0.4);
     color: #FFFFFF; font-weight: 800; font-size: 12px; white-space: nowrap;
   ">🏫 센터</div>`;
@@ -214,7 +215,7 @@ export default function RouteMap({ center, vehicles, focusVehicleId }) {
                   ...current, [item.vehicleId]: !current[item.vehicleId],
                 }))}
               >
-                <View style={[styles.legendSwatch, { backgroundColor: isHidden ? '#CBD5E1' : item.color }]} />
+                <View style={[styles.legendSwatch, { backgroundColor: isHidden ? '#E4E7EC' : item.color }]} />
                 <Text style={[styles.legendText, isHidden && styles.legendTextOff]}>
                   {item.label} · {item.stopCount}명
                 </Text>
@@ -228,22 +229,22 @@ export default function RouteMap({ center, vehicles, focusVehicleId }) {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: '#FFFFFF', borderRadius: 18, borderWidth: 1, borderColor: '#E2E8F0', overflow: 'hidden', marginBottom: 16 },
+  card: { backgroundColor: '#FFFFFF', borderRadius: 18, borderWidth: 1, borderColor: '#E4E7EC', overflow: 'hidden', marginBottom: 16 },
   mapHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 },
-  mapTitle: { color: '#0F172A', fontSize: 16, fontWeight: '900' },
-  mapCaption: { color: '#64748B', fontSize: 11, flexShrink: 1, textAlign: 'right' },
+  mapTitle: { color: '#0D2540', fontSize: 16, fontWeight: '900' },
+  mapCaption: { color: '#667085', fontSize: 11, flexShrink: 1, textAlign: 'right' },
   mapBody: { width: '100%' },
-  errorOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: '#FEF2F2', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  errorText: { color: '#B91C1C', fontWeight: '700', fontSize: 13, textAlign: 'center' },
-  legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderColor: '#E2E8F0' },
-  legendItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 999, borderWidth: 1, borderColor: '#E2E8F0', paddingHorizontal: 10, paddingVertical: 6 },
+  errorOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: '#FCEDED', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  errorText: { color: '#9B2C2C', fontWeight: '700', fontSize: 13, textAlign: 'center' },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderColor: '#E4E7EC' },
+  legendItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8F9FB', borderRadius: 999, borderWidth: 1, borderColor: '#E4E7EC', paddingHorizontal: 10, paddingVertical: 6 },
   legendItemOff: { opacity: 0.55 },
   legendSwatch: { width: 11, height: 11, borderRadius: 6, marginRight: 7 },
-  legendText: { color: '#334155', fontSize: 12, fontWeight: '700' },
-  legendTextOff: { textDecorationLine: 'line-through', color: '#94A3B8' },
+  legendText: { color: '#0D2540', fontSize: 12, fontWeight: '700' },
+  legendTextOff: { textDecorationLine: 'line-through', color: '#98A2B3' },
   fallback: { padding: 20, justifyContent: 'center' },
-  fallbackTitle: { color: '#0F172A', fontSize: 14, fontWeight: '900', marginBottom: 10 },
-  fallbackBody: { color: '#475569', fontSize: 12.5, lineHeight: 20 },
-  fallbackNote: { color: '#0F766E', fontSize: 12, fontWeight: '700', marginTop: 12 },
-  mono: { fontFamily: 'monospace', color: '#0F172A', backgroundColor: '#F1F5F9' },
+  fallbackTitle: { color: '#0D2540', fontSize: 14, fontWeight: '900', marginBottom: 10 },
+  fallbackBody: { color: '#667085', fontSize: 12.5, lineHeight: 20 },
+  fallbackNote: { color: '#0BA38E', fontSize: 12, fontWeight: '700', marginTop: 12 },
+  mono: { fontFamily: 'monospace', color: '#0D2540', backgroundColor: '#F2F4F7' },
 });

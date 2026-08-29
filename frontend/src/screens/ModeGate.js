@@ -1,5 +1,9 @@
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import Text from '../ui/Text';
+import { Image, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
+
+import Icon from '../ui/Icon';
+import { brand, color } from '../theme';
 
 // 관리자 화면 진입 PIN.
 // 이건 보안이 아니라 오조작 방지 장치다. EXPO_PUBLIC_* 값은 앱 번들에 박히므로
@@ -31,7 +35,7 @@ export default function ModeGate({ onSelect }) {
         style={styles.screen}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <Text style={styles.eyebrow}>DAYCARE ROUTING</Text>
+        <Text style={styles.eyebrow}>{brand.productName}</Text>
         <Text style={styles.heading}>관리자 확인</Text>
         <Text style={styles.sub}>관리자 PIN 을 입력해 주세요.</Text>
 
@@ -40,7 +44,7 @@ export default function ModeGate({ onSelect }) {
           value={pin}
           onChangeText={(text) => { setPin(text.replace(/[^0-9]/g, '')); setError(''); }}
           placeholder="••••"
-          placeholderTextColor="#CBD5E1"
+          placeholderTextColor="#E4E7EC"
           keyboardType="number-pad"
           secureTextEntry
           maxLength={8}
@@ -53,7 +57,8 @@ export default function ModeGate({ onSelect }) {
           <Text style={styles.primaryText}>확인</Text>
         </Pressable>
         <Pressable style={styles.linkButton} onPress={() => { setAsking(false); setPin(''); setError(''); }}>
-          <Text style={styles.linkText}>← 뒤로</Text>
+          <Icon name="back" size={15} tint={color.textSecondary} />
+          <Text style={styles.linkText}>뒤로</Text>
         </Pressable>
       </KeyboardAvoidingView>
     );
@@ -61,21 +66,33 @@ export default function ModeGate({ onSelect }) {
 
   return (
     <View style={styles.screen}>
-      <Text style={styles.eyebrow}>DAYCARE ROUTING</Text>
-      <Text style={styles.heading}>송영 최적화</Text>
-      <Text style={styles.sub}>어떤 화면으로 들어가시겠어요?</Text>
+      <View style={styles.brandRow}>
+        <Image
+          source={require('../../assets/mroute-mark.png')}
+          style={styles.mark}
+          resizeMode="contain"
+        />
+        <View style={styles.brandText}>
+          <Text style={styles.heading}>{brand.productName}</Text>
+          <Text style={styles.eyebrow}>{brand.descriptor}</Text>
+        </View>
+      </View>
+      <Text style={styles.sub}>{brand.tagline}</Text>
 
       <Pressable style={[styles.choice, styles.choiceDriver]} onPress={() => onSelect('driver')}>
-        <Text style={styles.choiceIcon}>🚐</Text>
-        <Text style={styles.choiceTitle}>기사님</Text>
-        <Text style={styles.choiceDesc}>오늘 내 차량의 탑승 명단만 크게 봅니다</Text>
+        <Icon name="vehicle" size={30} tint={color.green} />
+        <Text style={styles.choiceTitle}>기사님 · 운행</Text>
+        <Text style={styles.choiceDesc}>오늘 내 차량의 동선과 탑승 명단을 봅니다</Text>
       </Pressable>
 
       <Pressable style={[styles.choice, styles.choiceAdmin]} onPress={() => setAsking(true)}>
-        <Text style={styles.choiceIcon}>🗂️</Text>
-        <Text style={styles.choiceTitle}>관리자</Text>
-        <Text style={styles.choiceDesc}>차량·어르신 등록, 배차 계산, 전체 관제</Text>
-        <Text style={styles.lockHint}>🔒 PIN 필요</Text>
+        <Icon name="admin" size={30} tint={color.deepNavy} />
+        <Text style={styles.choiceTitle}>관리자 · 배차</Text>
+        <Text style={styles.choiceDesc}>배차 계산과 경로·차량 운영, 전체 관제</Text>
+        <View style={styles.lockRow}>
+          <Icon name="locked" size={13} tint={color.textSecondary} />
+          <Text style={styles.lockHint}>PIN 필요</Text>
+        </View>
       </Pressable>
 
       <Text style={styles.footnote}>
@@ -87,25 +104,28 @@ export default function ModeGate({ onSelect }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#F1F5F9', paddingHorizontal: 24, paddingTop: 60, alignItems: 'stretch' },
-  eyebrow: { color: '#0F766E', fontSize: 11, fontWeight: '900', letterSpacing: 1.4 },
-  heading: { color: '#0F172A', fontSize: 28, fontWeight: '900', marginTop: 4 },
-  sub: { color: '#64748B', fontSize: 14, marginTop: 8, marginBottom: 28 },
+  screen: { flex: 1, backgroundColor: '#F2F4F7', paddingHorizontal: 24, paddingTop: 60, alignItems: 'stretch' },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  mark: { width: 56, height: 56 },
+  brandText: { flex: 1, minWidth: 0 },
+  eyebrow: { color: '#0BA38E', fontSize: 12, fontWeight: '600', marginTop: 2 },
+  heading: { color: '#0D2540', fontSize: 26, fontWeight: '700' },
+  sub: { color: '#667085', fontSize: 14, marginTop: 14, marginBottom: 26 },
 
-  choice: { borderRadius: 20, padding: 22, marginBottom: 14, borderWidth: 2 },
-  choiceDriver: { backgroundColor: '#ECFDF5', borderColor: '#10B981' },
-  choiceAdmin: { backgroundColor: '#FFFFFF', borderColor: '#CBD5E1' },
-  choiceIcon: { fontSize: 32 },
-  choiceTitle: { color: '#0F172A', fontSize: 21, fontWeight: '900', marginTop: 8 },
-  choiceDesc: { color: '#475569', fontSize: 13, marginTop: 5, lineHeight: 19 },
-  lockHint: { color: '#94A3B8', fontSize: 12, fontWeight: '700', marginTop: 8 },
+  choice: { borderRadius: 16, padding: 20, marginBottom: 12, borderWidth: 1.5 },
+  choiceDriver: { backgroundColor: '#E9F7EF', borderColor: '#3BB273' },
+  choiceAdmin: { backgroundColor: '#FFFFFF', borderColor: '#E4E7EC' },
+  choiceTitle: { color: '#0D2540', fontSize: 20, fontWeight: '700', marginTop: 10 },
+  choiceDesc: { color: '#667085', fontSize: 13, marginTop: 4, lineHeight: 19 },
+  lockRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10 },
+  lockHint: { color: '#667085', fontSize: 12, fontWeight: '600' },
 
-  pinInput: { backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: '#CBD5E1', borderRadius: 14, height: 60, fontSize: 26, letterSpacing: 10, textAlign: 'center', color: '#0F172A', marginBottom: 12 },
-  error: { color: '#DC2626', fontSize: 13, fontWeight: '700', marginBottom: 10, textAlign: 'center' },
-  primaryButton: { backgroundColor: '#0F766E', borderRadius: 15, height: 54, alignItems: 'center', justifyContent: 'center' },
-  primaryText: { color: '#FFFFFF', fontSize: 17, fontWeight: '900' },
-  linkButton: { alignItems: 'center', paddingVertical: 16 },
-  linkText: { color: '#64748B', fontSize: 14, fontWeight: '700' },
+  pinInput: { backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: '#E4E7EC', borderRadius: 14, height: 60, fontSize: 26, letterSpacing: 10, textAlign: 'center', color: '#0D2540', marginBottom: 12 },
+  error: { color: '#D64545', fontSize: 13, fontWeight: '700', marginBottom: 10, textAlign: 'center' },
+  primaryButton: { backgroundColor: '#0D2540', borderRadius: 12, height: 54, alignItems: 'center', justifyContent: 'center' },
+  primaryText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
+  linkButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 16 },
+  linkText: { color: '#667085', fontSize: 14, fontWeight: '600' },
 
-  footnote: { color: '#94A3B8', fontSize: 12, textAlign: 'center', lineHeight: 19, marginTop: 8 },
+  footnote: { color: '#98A2B3', fontSize: 12, textAlign: 'center', lineHeight: 19, marginTop: 8 },
 });

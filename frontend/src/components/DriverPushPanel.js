@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import Text from '../ui/Text';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { enablePushForDriver, getPushEnvironment } from '../push';
 
@@ -85,7 +86,7 @@ export default function DriverPushPanel({ vehicles }) {
               disabled={Boolean(busy)}
             >
               {isBusy ? (
-                <ActivityIndicator size="small" color="#0F766E" />
+                <ActivityIndicator size="small" color="#0BA38E" />
               ) : (
                 <Text style={[styles.chipText, isDone && styles.chipTextDone]}>
                   {isDone ? `✅ ${name} 선생님` : `${name} 선생님`}
@@ -100,13 +101,13 @@ export default function DriverPushPanel({ vehicles }) {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#E2E8F0' },
-  title: { color: '#0F172A', fontSize: 15, fontWeight: '900' },
-  body: { color: '#64748B', fontSize: 12.5, lineHeight: 19, marginTop: 5 },
-  hint: { color: '#0F766E', fontSize: 12, fontWeight: '700', marginTop: 8, lineHeight: 18 },
+  card: { backgroundColor: '#FFFFFF', borderRadius: 18, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#E4E7EC' },
+  title: { color: '#0D2540', fontSize: 15, fontWeight: '900' },
+  body: { color: '#667085', fontSize: 12.5, lineHeight: 19, marginTop: 5 },
+  hint: { color: '#0BA38E', fontSize: 12, fontWeight: '700', marginTop: 8, lineHeight: 18 },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
-  chip: { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#0F766E', borderRadius: 999, paddingHorizontal: 15, paddingVertical: 10, minWidth: 110, alignItems: 'center' },
-  chipDone: { backgroundColor: '#ECFDF5', borderColor: '#10B981' },
-  chipText: { color: '#0F766E', fontSize: 13, fontWeight: '800' },
-  chipTextDone: { color: '#047857' },
+  chip: { backgroundColor: '#F8F9FB', borderWidth: 1.5, borderColor: '#0BA38E', borderRadius: 999, paddingHorizontal: 15, paddingVertical: 10, minWidth: 110, alignItems: 'center' },
+  chipDone: { backgroundColor: '#E9F7EF', borderColor: '#3BB273' },
+  chipText: { color: '#0BA38E', fontSize: 13, fontWeight: '800' },
+  chipTextDone: { color: '#237B4B' },
 });

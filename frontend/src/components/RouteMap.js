@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import Text from '../ui/Text';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 import { API_URL } from '../api';
@@ -190,7 +191,7 @@ export default function RouteMap({ center, vehicles, focusVehicleId }) {
 
         {showOverlay && phase !== 'error' && (
           <View style={styles.overlay}>
-            <ActivityIndicator size="large" color="#0F766E" />
+            <ActivityIndicator size="large" color="#0BA38E" />
             <Text style={styles.overlayTitle}>
               {phase === 'waking'
                 ? '서버를 깨우고 지도를 불러오는 중입니다…'
@@ -222,18 +223,18 @@ export default function RouteMap({ center, vehicles, focusVehicleId }) {
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: '#FFFFFF', borderRadius: 18, borderWidth: 1, borderColor: '#E2E8F0', overflow: 'hidden', marginBottom: 16 },
+  card: { backgroundColor: '#FFFFFF', borderRadius: 18, borderWidth: 1, borderColor: '#E4E7EC', overflow: 'hidden', marginBottom: 16 },
   header: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 },
-  title: { color: '#0F172A', fontSize: 16, fontWeight: '900' },
-  caption: { color: '#64748B', fontSize: 11, flexShrink: 1, textAlign: 'right' },
-  body: { width: '100%', height: 380, backgroundColor: '#E2E8F0' },
-  webview: { flex: 1, backgroundColor: '#E2E8F0' },
-  overlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F1F5F9', gap: 12, paddingHorizontal: 28 },
-  overlayTitle: { color: '#0F172A', fontSize: 15, fontWeight: '800', textAlign: 'center' },
-  overlayHint: { color: '#64748B', fontSize: 12.5, textAlign: 'center', lineHeight: 19 },
-  elapsed: { color: '#0F766E', fontSize: 13, fontWeight: '800' },
-  errorOverlay: { backgroundColor: '#FEF2F2' },
-  errorText: { color: '#B91C1C', fontSize: 13.5, fontWeight: '700', textAlign: 'center', lineHeight: 20 },
-  retryButton: { backgroundColor: '#B91C1C', borderRadius: 10, paddingHorizontal: 20, paddingVertical: 10 },
+  title: { color: '#0D2540', fontSize: 16, fontWeight: '900' },
+  caption: { color: '#667085', fontSize: 11, flexShrink: 1, textAlign: 'right' },
+  body: { width: '100%', height: 380, backgroundColor: '#E4E7EC' },
+  webview: { flex: 1, backgroundColor: '#E4E7EC' },
+  overlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F2F4F7', gap: 12, paddingHorizontal: 28 },
+  overlayTitle: { color: '#0D2540', fontSize: 15, fontWeight: '800', textAlign: 'center' },
+  overlayHint: { color: '#667085', fontSize: 12.5, textAlign: 'center', lineHeight: 19 },
+  elapsed: { color: '#0BA38E', fontSize: 13, fontWeight: '800' },
+  errorOverlay: { backgroundColor: '#FCEDED' },
+  errorText: { color: '#9B2C2C', fontSize: 13.5, fontWeight: '700', textAlign: 'center', lineHeight: 20 },
+  retryButton: { backgroundColor: '#9B2C2C', borderRadius: 10, paddingHorizontal: 20, paddingVertical: 10 },
   retryText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
 });

@@ -1,5 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFonts } from 'expo-font';
+import * as SplashScreen from 'expo-splash-screen';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import Text from './src/ui/Text';
+import { brand, color } from './src/theme';
 import {
   ActivityIndicator,
   Alert,
@@ -13,7 +17,6 @@ import {
   ScrollView,
   StatusBar,
   StyleSheet,
-  Text,
   TextInput,
   TouchableOpacity,
   View,
@@ -89,7 +92,16 @@ const STORAGE_KEY = 'daycare-routing:last-session:v1';
 // 기사님 폰은 한 번 고르면 계속 기사 화면으로 열려야 한다.
 const MODE_KEY = 'daycare-routing:mode:v1';
 
+// 준비가 끝날 때까지 스플래시를 내리지 않는다.
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    'Pretendard-Regular': require('./assets/fonts/Pretendard-Regular.ttf'),
+    'Pretendard-Medium': require('./assets/fonts/Pretendard-Medium.ttf'),
+    'Pretendard-SemiBold': require('./assets/fonts/Pretendard-SemiBold.ttf'),
+    'Pretendard-Bold': require('./assets/fonts/Pretendard-Bold.ttf'),
+  });
   const [screen, setScreen] = useState('vehicles');
   const [vehicles, setVehicles] = useState([emptyVehicle()]);
   const [center, setCenter] = useState({
@@ -226,6 +238,10 @@ export default function App() {
       subscription.remove();
     };
   }, [screen, syncLiveState]);
+
+  useEffect(() => {
+    if (fontsLoaded && mode !== null) SplashScreen.hideAsync().catch(() => {});
+  }, [fontsLoaded, mode]);
 
   const passengerCount = useMemo(
     () => passengers.filter(
@@ -491,20 +507,16 @@ export default function App() {
 
   // 저장소에서 모드를 읽기 전에는 아무것도 그리지 않는다.
   // 잠깐이라도 관리자 화면이 스쳐 보이면 기사님이 혼란스럽다.
-  if (mode === null) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.bootScreen}>
-          <ActivityIndicator size="large" color="#0F766E" />
-        </View>
-      </SafeAreaView>
-    );
+  if (!fontsLoaded || mode === null) {
+    // 스플래시가 아직 떠 있다. 그 뒤에서 같은 색 배경을 깔아 두어야
+    // 스플래시가 내려가는 순간 흰 화면이 번쩍이지 않는다.
+    return <View style={styles.bootScreen} />;
   }
 
   if (mode === 'gate') {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="dark-content" backgroundColor="#F1F5F9" />
+        <StatusBar barStyle="dark-content" backgroundColor="#F2F4F7" />
         <ModeGate onSelect={chooseMode} />
       </SafeAreaView>
     );
@@ -513,7 +525,7 @@ export default function App() {
   if (mode === 'driver') {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="light-content" backgroundColor="#0F766E" />
+        <StatusBar barStyle="light-content" backgroundColor="#0BA38E" />
         <DriverScreen onExit={leaveMode} />
       </SafeAreaView>
     );
@@ -521,12 +533,12 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F1F5F9" />
+      <StatusBar barStyle="dark-content" backgroundColor="#F2F4F7" />
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.topBar}>
           <View>
-            <Text style={styles.eyebrow}>DAYCARE ROUTING</Text>
-            <Text style={styles.appTitle}>송영 최적화</Text>
+            <Text style={styles.eyebrow}>{brand.descriptor}</Text>
+            <Text style={styles.appTitle}>{brand.productName}</Text>
           </View>
           <Pressable style={styles.statusPill} onPress={leaveMode}>
             <View style={styles.statusDot} />
@@ -586,7 +598,7 @@ export default function App() {
                 <TextInput style={styles.input} value={center.name} onChangeText={(text) => setCenter({ ...center, name: text })} placeholder="센터명" />
                 <Text style={styles.inputLabel}>센터 주소</Text>
                 <TouchableOpacity
-                  style={{ backgroundColor: '#0f766e', padding: 12, borderRadius: 8, marginTop: 5, marginBottom: 8 }}
+                  style={{ backgroundColor: '#0BA38E', padding: 12, borderRadius: 8, marginTop: 5, marginBottom: 8 }}
                   onPress={() => setIsCenterAddressModalOpen(true)}
                 >
                   <Text style={{ color: 'white', textAlign: 'center', fontWeight: 'bold' }}>
@@ -717,32 +729,32 @@ export default function App() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  safeArea: { flex: 1, backgroundColor: '#F1F5F9' },
-  bootScreen: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  safeArea: { flex: 1, backgroundColor: '#F2F4F7' },
+  bootScreen: { flex: 1, backgroundColor: color.deepNavy },
   topBar: { paddingHorizontal: 18, paddingTop: 14, paddingBottom: 11, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  eyebrow: { color: '#0F766E', fontSize: 10, fontWeight: '900', letterSpacing: 1.4 },
-  appTitle: { color: '#0F172A', fontSize: 24, fontWeight: '900', marginTop: 1 },
+  eyebrow: { color: '#0BA38E', fontSize: 10, fontWeight: '900', letterSpacing: 1.4 },
+  appTitle: { color: '#0D2540', fontSize: 24, fontWeight: '900', marginTop: 1 },
   statusPill: { maxWidth: 160, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 9, paddingVertical: 6, borderRadius: 20, backgroundColor: '#FFFFFF' },
-  statusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#10B981', marginRight: 5 },
-  statusText: { color: '#64748B', fontSize: 9, flexShrink: 1 },
-  tabs: { marginHorizontal: 18, backgroundColor: '#E2E8F0', borderRadius: 13, padding: 4, flexDirection: 'row' },
+  statusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#3BB273', marginRight: 5 },
+  statusText: { color: '#667085', fontSize: 9, flexShrink: 1 },
+  tabs: { marginHorizontal: 18, backgroundColor: '#E4E7EC', borderRadius: 13, padding: 4, flexDirection: 'row' },
   tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
   activeTab: { backgroundColor: '#FFFFFF' },
-  tabText: { color: '#64748B', fontSize: 13, fontWeight: '800' },
-  activeTabText: { color: '#0F766E' },
+  tabText: { color: '#667085', fontSize: 13, fontWeight: '800' },
+  activeTabText: { color: '#0BA38E' },
   disabledText: { opacity: 0.35 },
   content: { padding: 18, paddingBottom: 50 },
-  sectionTitle: { color: '#0F172A', fontSize: 18, fontWeight: '900' },
-  sectionCaption: { color: '#64748B', fontSize: 12, marginTop: 3, marginBottom: 12 },
-  centerCard: { backgroundColor: '#FFFFFF', padding: 16, borderRadius: 18, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 24 },
-  inputLabel: { color: '#475569', fontWeight: '700', fontSize: 13, marginBottom: 6 },
-  input: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 12, paddingHorizontal: 13, height: 48, fontSize: 15, color: '#0F172A', marginBottom: 12 },
+  sectionTitle: { color: '#0D2540', fontSize: 18, fontWeight: '900' },
+  sectionCaption: { color: '#667085', fontSize: 12, marginTop: 3, marginBottom: 12 },
+  centerCard: { backgroundColor: '#FFFFFF', padding: 16, borderRadius: 18, borderWidth: 1, borderColor: '#E4E7EC', marginBottom: 24 },
+  inputLabel: { color: '#667085', fontWeight: '700', fontSize: 13, marginBottom: 6 },
+  input: { backgroundColor: '#F8F9FB', borderWidth: 1, borderColor: '#E4E7EC', borderRadius: 12, paddingHorizontal: 13, height: 48, fontSize: 15, color: '#0D2540', marginBottom: 12 },
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  excelButton: { backgroundColor: '#E0F2FE', borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9 },
-  excelButtonText: { color: '#0369A1', fontWeight: '800', fontSize: 12 },
-  fileName: { color: '#0284C7', fontSize: 11, marginTop: -7, marginBottom: 12 },
-  addButton: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#94A3B8', borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginBottom: 14 },
-  addButtonText: { color: '#475569', fontWeight: '800' },
+  excelButton: { backgroundColor: '#E6F7F4', borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9 },
+  excelButtonText: { color: '#07705F', fontWeight: '800', fontSize: 12 },
+  fileName: { color: '#0BA38E', fontSize: 11, marginTop: -7, marginBottom: 12 },
+  addButton: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#98A2B3', borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginBottom: 14 },
+  addButtonText: { color: '#667085', fontWeight: '800' },
   // 스크롤 위에 떠 있는 계산 버튼.
   // wrap 은 터치를 통과시키고(box-none) 버튼만 누르게 한다. 안 그러면
   // 버튼 옆 빈 공간이 스크롤을 먹는다.
@@ -753,27 +765,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18, alignItems: 'center',
     paddingBottom: Platform.select({ android: 96, ios: 34, default: 24 }),
   },
-  fab: { width: '100%', maxWidth: 520, backgroundColor: '#0F766E', borderRadius: 999, height: 58, alignItems: 'center', justifyContent: 'center', shadowColor: '#0F172A', shadowOpacity: 0.28, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 8 },
+  fab: { width: '100%', maxWidth: 520, backgroundColor: '#0BA38E', borderRadius: 999, height: 58, alignItems: 'center', justifyContent: 'center', shadowColor: '#0D2540', shadowOpacity: 0.28, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 8 },
   fabText: { color: '#FFFFFF', fontSize: 17, fontWeight: '900' },
   // 버튼이 가리는 만큼 스크롤 끝에 자리를 비운다. 안 그러면 마지막 항목이 가린다.
   fabSpacer: { height: Platform.select({ android: 168, ios: 106, default: 96 }) },
-  optimizeButton: { backgroundColor: '#0F766E', borderRadius: 15, height: 56, alignItems: 'center', justifyContent: 'center', shadowColor: '#0F766E', shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 4 },
-  nextButton: { backgroundColor: '#0369A1', borderRadius: 15, height: 54, alignItems: 'center', justifyContent: 'center' },
+  optimizeButton: { backgroundColor: '#0BA38E', borderRadius: 15, height: 56, alignItems: 'center', justifyContent: 'center', shadowColor: '#0BA38E', shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 4 },
+  nextButton: { backgroundColor: '#07705F', borderRadius: 15, height: 54, alignItems: 'center', justifyContent: 'center' },
   optimizeButtonText: { color: '#FFFFFF', fontSize: 17, fontWeight: '900' },
   disabledButton: { opacity: 0.6 },
-  hint: { color: '#94A3B8', fontSize: 11, textAlign: 'center', marginTop: 10 },
+  hint: { color: '#98A2B3', fontSize: 11, textAlign: 'center', marginTop: 10 },
   resultsHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  editLink: { color: '#0284C7', fontWeight: '800', fontSize: 13 },
-  capacitySummary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ECFDF5', borderRadius: 14, padding: 14, marginBottom: 14 },
-  capacityLabel: { color: '#166534', fontWeight: '800' },
-  capacityValue: { color: '#047857', fontSize: 16, fontWeight: '900' },
+  editLink: { color: '#0BA38E', fontWeight: '800', fontSize: 13 },
+  capacitySummary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#E9F7EF', borderRadius: 14, padding: 14, marginBottom: 14 },
+  capacityLabel: { color: '#237B4B', fontWeight: '800' },
+  capacityValue: { color: '#237B4B', fontSize: 16, fontWeight: '900' },
   actionRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
-  exportButton: { flex: 1, backgroundColor: '#1D4ED8', borderRadius: 13, paddingVertical: 13, alignItems: 'center' },
-  dispatchButton: { flex: 1, backgroundColor: '#0F766E', borderRadius: 13, paddingVertical: 13, alignItems: 'center', justifyContent: 'center' },
+  exportButton: { flex: 1, backgroundColor: '#0BA38E', borderRadius: 13, paddingVertical: 13, alignItems: 'center' },
+  dispatchButton: { flex: 1, backgroundColor: '#0BA38E', borderRadius: 13, paddingVertical: 13, alignItems: 'center', justifyContent: 'center' },
   driverPanelSpacing: { marginTop: 18 },
-  syncBar: { alignSelf: 'flex-start', backgroundColor: '#E0F2FE', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7, marginBottom: 12 },
-  syncText: { color: '#0369A1', fontSize: 12, fontWeight: '700' },
-  focusBanner: { backgroundColor: '#ECFDF5', borderWidth: 1, borderColor: '#A7F3D0', borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginBottom: 12 },
-  focusBannerText: { color: '#047857', fontWeight: '800', fontSize: 12.5 },
+  syncBar: { alignSelf: 'flex-start', backgroundColor: '#E6F7F4', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7, marginBottom: 12 },
+  syncText: { color: '#07705F', fontSize: 12, fontWeight: '700' },
+  focusBanner: { backgroundColor: '#E9F7EF', borderWidth: 1, borderColor: '#6ED6C1', borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginBottom: 12 },
+  focusBannerText: { color: '#237B4B', fontWeight: '800', fontSize: 12.5 },
   exportButtonText: { color: '#FFFFFF', fontWeight: '900', fontSize: 14 },
 });

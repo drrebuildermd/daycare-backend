@@ -1,5 +1,6 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import Text from '../ui/Text';
+import { StyleSheet, View } from 'react-native';
 
 /**
  * 관리자 화면 상단 현황판.
@@ -37,13 +38,13 @@ export default function SummaryBar({ vehicles, passengers }) {
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 8, marginHorizontal: 18, marginBottom: 12 },
   cell: { flex: 1, borderRadius: 14, paddingVertical: 11, paddingHorizontal: 12, borderWidth: 1 },
-  cell_blue: { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' },
-  cell_slate: { backgroundColor: '#F8FAFC', borderColor: '#E2E8F0' },
-  cell_teal: { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' },
-  label: { color: '#64748B', fontSize: 11, fontWeight: '700' },
+  cell_blue: { backgroundColor: '#E6F7F4', borderColor: '#6ED6C1' },
+  cell_slate: { backgroundColor: '#F8F9FB', borderColor: '#E4E7EC' },
+  cell_teal: { backgroundColor: '#E9F7EF', borderColor: '#6ED6C1' },
+  label: { color: '#667085', fontSize: 11, fontWeight: '700' },
   value: { fontSize: 20, fontWeight: '900', marginTop: 3 },
-  value_blue: { color: '#1D4ED8' },
-  value_slate: { color: '#334155' },
-  value_teal: { color: '#047857' },
+  value_blue: { color: '#0BA38E' },
+  value_slate: { color: '#0D2540' },
+  value_teal: { color: '#237B4B' },
   unit: { fontSize: 12, fontWeight: '800' },
 });

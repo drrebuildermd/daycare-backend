@@ -1,8 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator, Alert, BackHandler, Linking, Pressable, ScrollView,
-  StyleSheet, Text, View,
-} from 'react-native';
+import Text from '../ui/Text';
+import { ActivityIndicator, Alert, BackHandler, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import {
   acknowledgeDispatch,
@@ -178,7 +176,7 @@ export default function DriverScreen({ onExit }) {
   if (phase === 'loading') {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#0F766E" />
+        <ActivityIndicator size="large" color="#0BA38E" />
         <Text style={styles.centerTitle}>오늘 배차를 불러오는 중입니다…</Text>
         <Text style={styles.centerHint}>
           절전 상태였던 서버를 깨우는 중일 수 있습니다.{'\n'}
@@ -401,70 +399,70 @@ export default function DriverScreen({ onExit }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#F1F5F9' },
-  center: { flex: 1, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 14 },
-  centerTitle: { color: '#0F172A', fontSize: 17, fontWeight: '800', textAlign: 'center' },
-  centerHint: { color: '#64748B', fontSize: 13.5, textAlign: 'center', lineHeight: 21 },
-  elapsed: { color: '#0F766E', fontSize: 15, fontWeight: '900' },
-  errorText: { color: '#B91C1C', fontSize: 15, fontWeight: '700', textAlign: 'center', lineHeight: 22 },
+  screen: { flex: 1, backgroundColor: '#F2F4F7' },
+  center: { flex: 1, backgroundColor: '#F2F4F7', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 14 },
+  centerTitle: { color: '#0D2540', fontSize: 17, fontWeight: '800', textAlign: 'center' },
+  centerHint: { color: '#667085', fontSize: 13.5, textAlign: 'center', lineHeight: 21 },
+  elapsed: { color: '#0BA38E', fontSize: 15, fontWeight: '900' },
+  errorText: { color: '#9B2C2C', fontSize: 15, fontWeight: '700', textAlign: 'center', lineHeight: 22 },
 
-  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 14, backgroundColor: '#0F766E' },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 14, backgroundColor: '#0BA38E' },
   topActionButton: { backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
   topTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '900' },
-  topSub: { color: '#A7F3D0', fontSize: 13, fontWeight: '700', marginTop: 3 },
+  topSub: { color: '#6ED6C1', fontSize: 13, fontWeight: '700', marginTop: 3 },
   topAction: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
 
   pickBody: { padding: 18, gap: 12 },
-  pickHeading: { color: '#0F172A', fontSize: 18, fontWeight: '900', marginBottom: 4 },
-  vehiclePick: { backgroundColor: '#FFFFFF', borderRadius: 18, borderWidth: 2, borderColor: '#0F766E', padding: 22 },
-  vehiclePickName: { color: '#0F172A', fontSize: 24, fontWeight: '900' },
-  vehiclePickPlate: { color: '#0F766E', fontSize: 17, fontWeight: '800', marginTop: 2 },
-  vehiclePickMeta: { color: '#64748B', fontSize: 14, marginTop: 8 },
-  vehiclePickStart: { color: '#B45309', fontSize: 13, fontWeight: '700', lineHeight: 19, flexShrink: 1 },
-  vehiclePickCenter: { color: '#0F766E', fontSize: 13, fontWeight: '700', marginTop: 6 },
+  pickHeading: { color: '#0D2540', fontSize: 18, fontWeight: '900', marginBottom: 4 },
+  vehiclePick: { backgroundColor: '#FFFFFF', borderRadius: 18, borderWidth: 2, borderColor: '#0BA38E', padding: 22 },
+  vehiclePickName: { color: '#0D2540', fontSize: 24, fontWeight: '900' },
+  vehiclePickPlate: { color: '#0BA38E', fontSize: 17, fontWeight: '800', marginTop: 2 },
+  vehiclePickMeta: { color: '#667085', fontSize: 14, marginTop: 8 },
+  vehiclePickStart: { color: '#8A6100', fontSize: 13, fontWeight: '700', lineHeight: 19, flexShrink: 1 },
+  vehiclePickCenter: { color: '#0BA38E', fontSize: 13, fontWeight: '700', marginTop: 6 },
   startRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 6 },
-  selfBadge: { backgroundColor: '#FEF3C7', borderWidth: 1, borderColor: '#FCD34D', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-  selfBadgeText: { color: '#B45309', fontSize: 11, fontWeight: '900' },
-  ackBar: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: '#E2E8F0', padding: 14, marginBottom: 12 },
-  ackBarDone: { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' },
-  ackText: { flex: 1, color: '#475569', fontSize: 13, fontWeight: '700', lineHeight: 19 },
-  ackTextDone: { color: '#047857' },
-  ackButton: { backgroundColor: '#0F766E', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12 },
+  selfBadge: { backgroundColor: '#FEF6E7', borderWidth: 1, borderColor: '#F2B84B', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  selfBadgeText: { color: '#8A6100', fontSize: 11, fontWeight: '900' },
+  ackBar: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: '#E4E7EC', padding: 14, marginBottom: 12 },
+  ackBarDone: { backgroundColor: '#E9F7EF', borderColor: '#6ED6C1' },
+  ackText: { flex: 1, color: '#667085', fontSize: 13, fontWeight: '700', lineHeight: 19 },
+  ackTextDone: { color: '#237B4B' },
+  ackButton: { backgroundColor: '#0BA38E', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12 },
   ackButtonText: { color: '#FFFFFF', fontSize: 13.5, fontWeight: '900' },
 
   listBody: { padding: 14, paddingBottom: 40 },
   roundHeader: { flexDirection: 'row', alignItems: 'baseline', gap: 10, marginTop: 8, marginBottom: 10, paddingHorizontal: 4 },
-  roundText: { color: '#0F172A', fontSize: 18, fontWeight: '900' },
-  roundMeta: { color: '#64748B', fontSize: 13, fontWeight: '700' },
+  roundText: { color: '#0D2540', fontSize: 18, fontWeight: '900' },
+  roundMeta: { color: '#667085', fontSize: 13, fontWeight: '700' },
 
-  stopCard: { backgroundColor: '#FFFFFF', borderRadius: 18, borderWidth: 1, borderColor: '#E2E8F0', padding: 16, marginBottom: 12 },
-  stopCardDone: { backgroundColor: '#F8FAFC', borderColor: '#A7F3D0' },
+  stopCard: { backgroundColor: '#FFFFFF', borderRadius: 18, borderWidth: 1, borderColor: '#E4E7EC', padding: 16, marginBottom: 12 },
+  stopCardDone: { backgroundColor: '#F8F9FB', borderColor: '#6ED6C1' },
   stopHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  seq: { width: 40, height: 40, borderRadius: 14, backgroundColor: '#0F766E', alignItems: 'center', justifyContent: 'center' },
-  seqDone: { backgroundColor: '#10B981' },
+  seq: { width: 40, height: 40, borderRadius: 14, backgroundColor: '#0BA38E', alignItems: 'center', justifyContent: 'center' },
+  seqDone: { backgroundColor: '#3BB273' },
   seqText: { color: '#FFFFFF', fontSize: 19, fontWeight: '900' },
-  stopName: { color: '#0F172A', fontSize: 22, fontWeight: '900' },
-  stopNameDone: { color: '#64748B' },
-  stopAddress: { color: '#475569', fontSize: 14, marginTop: 4, lineHeight: 20 },
-  stopDetail: { color: '#0F766E', fontSize: 14, fontWeight: '700', marginTop: 2 },
-  stopTime: { color: '#0F766E', fontSize: 18, fontWeight: '900' },
+  stopName: { color: '#0D2540', fontSize: 22, fontWeight: '900' },
+  stopNameDone: { color: '#667085' },
+  stopAddress: { color: '#667085', fontSize: 14, marginTop: 4, lineHeight: 20 },
+  stopDetail: { color: '#0BA38E', fontSize: 14, fontWeight: '700', marginTop: 2 },
+  stopTime: { color: '#0BA38E', fontSize: 18, fontWeight: '900' },
 
   actionRow: { flexDirection: 'row', gap: 9, marginTop: 14 },
   action: { flex: 1, borderRadius: 14, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', gap: 3, minHeight: 68 },
-  actionNavi: { backgroundColor: '#EFF6FF', borderWidth: 1.5, borderColor: '#93C5FD' },
-  actionCall: { backgroundColor: '#FEF3C7', borderWidth: 1.5, borderColor: '#FCD34D' },
-  actionDone: { backgroundColor: '#0F766E' },
+  actionNavi: { backgroundColor: '#E6F7F4', borderWidth: 1.5, borderColor: '#6ED6C1' },
+  actionCall: { backgroundColor: '#FEF6E7', borderWidth: 1.5, borderColor: '#F2B84B' },
+  actionDone: { backgroundColor: '#0BA38E' },
   actionOff: { opacity: 0.45 },
   actionIcon: { fontSize: 22 },
-  actionLabel: { color: '#0F172A', fontSize: 13, fontWeight: '800' },
+  actionLabel: { color: '#0D2540', fontSize: 13, fontWeight: '800' },
   actionLabelOnDark: { color: '#FFFFFF' },
 
-  emptyCard: { backgroundColor: '#FFFFFF', borderRadius: 18, borderWidth: 1, borderColor: '#E2E8F0', padding: 24, alignItems: 'center', gap: 12 },
-  emptyTitle: { color: '#0F172A', fontSize: 16, fontWeight: '800', textAlign: 'center' },
-  emptyBody: { color: '#64748B', fontSize: 13.5, textAlign: 'center', lineHeight: 20 },
+  emptyCard: { backgroundColor: '#FFFFFF', borderRadius: 18, borderWidth: 1, borderColor: '#E4E7EC', padding: 24, alignItems: 'center', gap: 12 },
+  emptyTitle: { color: '#0D2540', fontSize: 16, fontWeight: '800', textAlign: 'center' },
+  emptyBody: { color: '#667085', fontSize: 13.5, textAlign: 'center', lineHeight: 20 },
 
-  bigButton: { backgroundColor: '#0F766E', borderRadius: 15, paddingHorizontal: 28, paddingVertical: 15 },
+  bigButton: { backgroundColor: '#0BA38E', borderRadius: 15, paddingHorizontal: 28, paddingVertical: 15 },
   bigButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' },
   linkButton: { paddingVertical: 12 },
-  linkText: { color: '#64748B', fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },
+  linkText: { color: '#667085', fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },
 });

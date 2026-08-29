@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "송영 최적화",
+    "name": "마중ON",
     "slug": "daycare-routing-mobile",
     "version": "1.4.0",
     "orientation": "portrait",
@@ -18,16 +18,42 @@
       "package": "com.daycare.routing",
       "googleServicesFile": "./google-services.json",
       "versionCode": 10,
-      "usesCleartextTraffic": true
+      "usesCleartextTraffic": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0D2540"
+      }
     },
     "plugins": [
-      "expo-document-picker"
+      "expo-document-picker",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "backgroundColor": "#0D2540",
+          "imageWidth": 220,
+          "resizeMode": "contain"
+        }
+      ]
     ],
     "extra": {
       "eas": {
         "projectId": "c523e7a6-1754-4a4b-a7ce-b03753a486ff"
       }
     },
-    "owner": "dr.rebuilder.md"
+    "owner": "dr.rebuilder.md",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0D2540"
+    },
+    "androidStatusBar": {
+      "barStyle": "light-content",
+      "backgroundColor": "#0D2540"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
   }
 }
