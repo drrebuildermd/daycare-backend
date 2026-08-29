@@ -28,6 +28,9 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
   const hasOwnPhone = (value.passengerPhone || '').replace(/[^0-9]/g, '').length >= 10;
   // 기존 데이터에는 없는 값이다. 알림은 받는 쪽, 전화는 보호자 쪽을 기본으로 본다.
   const smsOptIn = value.smsOptIn !== false;
+  // 아침엔 보호자가 모셔오고 오후엔 센터 차를 타는 분이 있다.
+  // 기존 명단에는 이 값이 없으므로 둘 다 탑승으로 본다.
+  const attendingOutbound = value.attendingOutbound !== false;
   const callsSelf = value.primaryContact === 'self';
 
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
@@ -45,22 +48,31 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
       summary={summary}
       badges={[
         attending
-          ? (hasGuardianPhone
-            ? { label: '탑승', icon: 'done', tone: 'success' }
-            : { label: '연락처 없음', icon: 'warning', tone: 'warning' })
-          : { label: '미탑승', tone: 'default' },
+          ? { label: '등원', icon: 'inbound', tone: 'success' }
+          : { label: '등원 안 함', icon: 'inbound', tone: 'default' },
+        attendingOutbound
+          ? { label: '하원', icon: 'outbound', tone: 'success' }
+          : { label: '하원 안 함', icon: 'outbound', tone: 'default' },
+        ...((attending || attendingOutbound) && !hasGuardianPhone
+          ? [{ label: '연락처 없음', icon: 'warning', tone: 'warning' }]
+          : []),
         ...(smsOptIn ? [] : [{ label: '알림 끔', icon: 'bellOff', tone: 'warning' }]),
       ]}
-      tone={attending ? 'default' : 'muted'}
+      tone={(attending || attendingOutbound) ? 'default' : 'muted'}
       onRemove={onRemove}
     >
+      {/* 등원과 하원을 따로 켜고 끈다. 명단에서 지우는 것이 아니라
+          그날 그 운행의 배차 대상에서만 빠진다. */}
       <View style={styles.attendanceRow}>
-        <View>
-          <Text style={[styles.attendanceLabel, !attending && styles.absentLabel]}>
-            {attending ? '오늘 탑승' : '오늘 미탑승'}
-          </Text>
+        <View style={styles.attendanceText}>
+          <View style={styles.labelRow}>
+            <Icon name="inbound" size={15} tint={attending ? color.teal : color.textSecondary} />
+            <Text style={[styles.attendanceLabel, !attending && styles.absentLabel]}>
+              등원 탑승
+            </Text>
+          </View>
           <Text style={styles.switchCaption}>
-            {attending ? '오늘 배차에 포함됩니다.' : '명단은 유지되고 오늘 배차에서만 빠집니다.'}
+            {attending ? '아침에 센터로 모셔옵니다.' : '등원 배차에서 빠집니다.'}
           </Text>
         </View>
         <Switch
@@ -68,6 +80,30 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
           onValueChange={(enabled) => set('attending', enabled)}
           trackColor={{ false: '#E4E7EC', true: '#6ED6C1' }}
           thumbColor={attending ? '#3BB273' : '#F8F9FB'}
+        />
+      </View>
+
+      <View style={styles.attendanceRow}>
+        <View style={styles.attendanceText}>
+          <View style={styles.labelRow}>
+            <Icon
+              name="outbound"
+              size={15}
+              tint={attendingOutbound ? color.teal : color.textSecondary}
+            />
+            <Text style={[styles.attendanceLabel, !attendingOutbound && styles.absentLabel]}>
+              하원 탑승
+            </Text>
+          </View>
+          <Text style={styles.switchCaption}>
+            {attendingOutbound ? '오후에 댁으로 모셔다드립니다.' : '하원 배차에서 빠집니다.'}
+          </Text>
+        </View>
+        <Switch
+          value={attendingOutbound}
+          onValueChange={(enabled) => set('attendingOutbound', enabled)}
+          trackColor={{ false: '#E4E7EC', true: '#6ED6C1' }}
+          thumbColor={attendingOutbound ? '#3BB273' : '#F8F9FB'}
         />
       </View>
       <Field label="어르신 이름" value={value.name} onChangeText={(text) => set('name', text)} placeholder="홍길동" />
@@ -224,6 +260,7 @@ const styles = StyleSheet.create({
   absentLabel: { color: '#667085' },
   field: { marginBottom: 12 },
   label: { color: '#667085', fontWeight: '700', fontSize: 13, marginBottom: 6 },
+  attendanceText: { flex: 1, minWidth: 0, paddingRight: 12 },
   warnRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   labelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   addressButton: { flexDirection: 'row', gap: 6, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0D2540', paddingVertical: 12, borderRadius: 10, marginTop: 5 },

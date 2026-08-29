@@ -21,6 +21,10 @@ const NAME = {
   route: 'map-marker-path',
   map: 'map-outline',
 
+  // 등원은 센터로 모셔오는 것, 하원은 댁으로 모셔다드리는 것.
+  inbound: 'login-variant',
+  outbound: 'logout-variant',
+
   // 출발지
   center: 'office-building',
   home: 'home-outline',

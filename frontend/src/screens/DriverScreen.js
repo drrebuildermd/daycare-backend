@@ -8,6 +8,10 @@ import {
   acknowledgeDispatch,
   fetchCompletedStopMap,
   fetchTodayAcks,
+  TRIP_INBOUND,
+  TRIP_OUTBOUND,
+  guessTripType,
+  tripLabel,
   fetchTodayDispatch,
   saveRideCompletion,
 } from '../api';
@@ -33,7 +37,37 @@ function formatAckTime(value) {
  * 현장에서 운전 중에 쓰는 화면이다. 탭도 설정도 없다.
  * 차량을 한 번 고르면 그 뒤로는 명단 / 내비 / 전화 / 완료 네 가지만 보인다.
  */
+function TripSwitch({ value, onChange }) {
+  return (
+    <View style={styles.tripRow}>
+      {[TRIP_INBOUND, TRIP_OUTBOUND].map((option) => {
+        const active = value === option;
+        return (
+          <Pressable
+            key={option}
+            style={[styles.tripChip, active && styles.tripChipOn]}
+            onPress={() => onChange(option)}
+          >
+            <Icon
+              name={option === TRIP_INBOUND ? 'inbound' : 'outbound'}
+              size={16}
+              tint={active ? color.deepNavy : '#C7D0DA'}
+            />
+            <Text style={[styles.tripChipText, active && styles.tripChipTextOn]}>
+              {tripLabel(option)}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+
 export default function DriverScreen({ onExit, bottomInset = 0 }) {
+  // 아침이면 등원, 오후면 하원으로 열어 준다. 기사님이 매번 고르지 않아도 되게.
+  // 손으로 바꿀 수 있어야 한다. 늦은 등원이나 이른 하원이 있다.
+  const [tripType, setTripType] = useState(guessTripType);
   const [dispatch, setDispatch] = useState(null);
   const [ackList, setAckList] = useState([]);
   const [vehicleId, setVehicleId] = useState(null);
@@ -56,9 +90,9 @@ export default function DriverScreen({ onExit, bottomInset = 0 }) {
     );
     try {
       const [today, done, acks] = await Promise.all([
-        fetchTodayDispatch(),
-        fetchCompletedStopMap().catch(() => ({})),
-        fetchTodayAcks().catch(() => ({ records: [] })),
+        fetchTodayDispatch(tripType),
+        fetchCompletedStopMap(tripType).catch(() => ({})),
+        fetchTodayAcks(tripType).catch(() => ({ records: [] })),
       ]);
       setDispatch(today.result || null);
       setCompleted(done);
@@ -71,7 +105,7 @@ export default function DriverScreen({ onExit, bottomInset = 0 }) {
       clearInterval(tickerRef.current);
       tickerRef.current = null;
     }
-  }, []);
+  }, [tripType]);
 
   useEffect(() => {
     load();
@@ -82,7 +116,7 @@ export default function DriverScreen({ onExit, bottomInset = 0 }) {
   useEffect(() => {
     if (phase !== 'ready' || !vehicleId) return undefined;
     const timer = setInterval(() => {
-      fetchCompletedStopMap().then(setCompleted).catch(() => {});
+      fetchCompletedStopMap(tripType).then(setCompleted).catch(() => {});
     }, POLL_MS);
     return () => clearInterval(timer);
   }, [phase, vehicleId]);
@@ -105,6 +139,9 @@ export default function DriverScreen({ onExit, bottomInset = 0 }) {
     return () => subscription.remove();
   }, [vehicleId]);
 
+  const outbound = tripType === TRIP_OUTBOUND;
+  const doneWord = outbound ? '하차 완료' : '탑승 완료';
+
   const completeStop = async (stop, tripRound) => {
     setSaving((current) => ({ ...current, [stop.passenger_id]: true }));
     try {
@@ -114,6 +151,7 @@ export default function DriverScreen({ onExit, bottomInset = 0 }) {
         vehicle_id: vehicle.vehicle_id,
         vehicle_type: vehicle.vehicle_type,
         vehicle_plate_number: vehicle.plate_number,
+        trip_type: tripType,
         trip_round: tripRound,
         scheduled_pickup: stop.estimated_pickup,
         center_name: dispatch?.center?.name || '',
@@ -123,7 +161,7 @@ export default function DriverScreen({ onExit, bottomInset = 0 }) {
       setCompleted((current) => ({ ...current, [stop.passenger_id]: record.completed_at }));
       if (record.sms_sent === false) {
         Alert.alert(
-          '탑승 완료 (문자 미발송)',
+          `${doneWord} (문자 미발송)`,
           `${stop.name} 어르신 기록은 저장했습니다.\n\n문자가 발송되지 않았습니다: ${record.sms_message || '사유 불명'}`,
         );
       }
@@ -143,6 +181,7 @@ export default function DriverScreen({ onExit, bottomInset = 0 }) {
     try {
       const record = await acknowledgeDispatch({
         vehicle_id: vehicle.vehicle_id,
+        trip_type: tripType,
         vehicle_label: `${vehicle.vehicle_type} ${vehicle.plate_number}`,
         driver_name: vehicle.driver_name || null,
       });
@@ -221,13 +260,19 @@ export default function DriverScreen({ onExit, bottomInset = 0 }) {
             <Text style={styles.topAction}>모드 변경</Text>
           </Pressable>
         </View>
+        <TripSwitch value={tripType} onChange={setTripType} />
         <ScrollView contentContainerStyle={[styles.pickBody, { paddingBottom: 18 + bottomInset }]}>
-          <Text style={styles.pickHeading}>운행하실 차량을 선택하세요</Text>
+          <Text style={styles.pickHeading}>
+            {tripLabel(tripType)}하실 차량을 선택하세요
+          </Text>
           {vehicles.length === 0 ? (
             <View style={styles.emptyCard}>
-              <Text style={styles.emptyTitle}>오늘 배차가 아직 없습니다</Text>
+              <Text style={styles.emptyTitle}>
+                오늘 {tripLabel(tripType)} 배차가 아직 없습니다
+              </Text>
               <Text style={styles.emptyBody}>
-                관리자가 배차를 전송하면 여기에 차량이 나타납니다.
+                관리자가 {tripLabel(tripType)} 배차를 전송하면 여기에 차량이 나타납니다.
+                {'\n'}위에서 {tripLabel(tripType === TRIP_INBOUND ? TRIP_OUTBOUND : TRIP_INBOUND)}으로 바꿔 볼 수도 있습니다.
               </Text>
               <Pressable style={styles.bigButton} onPress={load}>
                 <Text style={styles.bigButtonText}>새로고침</Text>
@@ -291,22 +336,27 @@ export default function DriverScreen({ onExit, bottomInset = 0 }) {
         <View style={{ flex: 1 }}>
           <Text style={styles.topTitle}>{vehicle.vehicle_type} {vehicle.plate_number}</Text>
           <Text style={styles.topSub}>
-            {doneCount}/{totalStops}명 탑승 완료
+            {doneCount}/{totalStops}명 {doneWord}
             {vehicle.driver_name ? ` · ${vehicle.driver_name} 선생님` : ''}
           </Text>
         </View>
-        <Pressable onPress={() => setVehicleId(null)} hitSlop={12} style={styles.topActionButton}>
+        <Pressable
+          onPress={() => setVehicleId(null)}
+          hitSlop={12}
+          style={[styles.topActionButton, { flexShrink: 0 }]}
+        >
           <Text style={styles.topAction}>차량 변경</Text>
         </Pressable>
       </View>
 
+      <TripSwitch value={tripType} onChange={setTripType} />
       <ScrollView contentContainerStyle={[styles.listBody, { paddingBottom: 40 + bottomInset }]}>
         <View style={[styles.ackBar, ackedAt && styles.ackBarDone]}>
           {!!ackedAt && <Icon name="done" size={16} tint="#237B4B" />}
           <Text style={[styles.ackText, ackedAt && styles.ackTextDone]}>
             {ackedAt
-              ? `배차표를 확인했습니다 (${formatAckTime(ackedAt)})`
-              : '오늘 배차표를 확인하셨으면 눌러 주세요. 관리자에게 전달됩니다.'}
+              ? `${tripLabel(tripType)} 배차표를 확인했습니다 (${formatAckTime(ackedAt)})`
+              : `오늘 ${tripLabel(tripType)} 배차표를 확인하셨으면 눌러 주세요. 관리자에게 전달됩니다.`}
           </Text>
           {!ackedAt && (
             <Pressable style={styles.ackButton} onPress={confirmDispatch} disabled={acking}>
@@ -400,7 +450,7 @@ export default function DriverScreen({ onExit, bottomInset = 0 }) {
                         <>
                           <Icon name={doneAt ? 'done' : 'boarded'} size={22} tint="#FFFFFF" />
                           <Text style={[styles.actionLabel, styles.actionLabelOnDark]}>
-                            {doneAt ? '완료됨' : '탑승 완료'}
+                            {doneAt ? '완료됨' : doneWord}
                           </Text>
                         </>
                       )}
@@ -439,6 +489,13 @@ const styles = StyleSheet.create({
   topSub: { color: '#6ED6C1', fontSize: 13, fontWeight: '700', marginTop: 3 },
   topAction: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
 
+  // 상단 딥네이비 띠 바로 아래에 붙는다. 선택된 쪽만 흰색으로 채워
+  // 지금 무엇을 운행 중인지 운전석에서도 바로 보이게 한다.
+  tripRow: { flexDirection: 'row', gap: 8, backgroundColor: '#0D2540', paddingHorizontal: 14, paddingBottom: 12 },
+  tripChip: { flex: 1, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 999, borderWidth: 1, borderColor: '#33506B' },
+  tripChipOn: { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' },
+  tripChipText: { color: '#C7D0DA', fontSize: 15, fontWeight: '700' },
+  tripChipTextOn: { color: '#0D2540' },
   pickBody: { padding: 18, gap: 12 },
   pickHeading: { color: '#0D2540', fontSize: 18, fontWeight: '700', marginBottom: 4 },
   vehiclePick: { backgroundColor: '#FFFFFF', borderRadius: 18, borderWidth: 2, borderColor: '#0BA38E', padding: 22 },

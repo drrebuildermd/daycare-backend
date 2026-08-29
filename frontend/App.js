@@ -27,6 +27,9 @@ import {
 import {
   API_URL,
   COMPLETION_POLL_MS,
+  TRIP_INBOUND,
+  TRIP_OUTBOUND,
+  tripLabel,
   fetchCompletedStopMap,
   fetchTodayAcks,
   fetchTodayCompletions,
@@ -55,6 +58,8 @@ const emptyPassenger = () => ({
   address: '',
   detailAddress: '',
   attending: true,
+  // 등원과 하원의 탑승 여부는 다를 수 있다.
+  attendingOutbound: true,
   pickupStart: '08:00',
   pickupEnd: '08:30',
   wheelchair: false,
@@ -120,6 +125,10 @@ function AdminApp() {
   //   버튼(58) + 버튼 아래 여백(기기 제스처바 + 16) + 콘텐츠와의 간격(16)
   const ctaClearance = FAB_HEIGHT + insets.bottom + FAB_GAP + 16;
   const [screen, setScreen] = useState('vehicles');
+  // 등원과 하원은 명단도 동선도 다르다. 결과를 따로 들고 있어야
+  // 토글을 오갈 때마다 다시 계산하지 않는다.
+  const [tripType, setTripType] = useState(TRIP_INBOUND);
+  const [results, setResults] = useState({ inbound: null, outbound: null });
   const [vehicles, setVehicles] = useState([emptyVehicle()]);
   const [center, setCenter] = useState({
     name: '주야간보호센터', address: '', latitude: '', longitude: '',
@@ -127,7 +136,11 @@ function AdminApp() {
   const [passengers, setPassengers] = useState([emptyPassenger()]);
   const [excelName, setExcelName] = useState('');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
+  const result = results[tripType];
+  const setResult = useCallback(
+    (next) => setResults((current) => ({ ...current, [tripType]: next })),
+    [tripType],
+  );
   const [completedStops, setCompletedStops] = useState({});
   const [savingStops, setSavingStops] = useState({});
   const [isCenterAddressModalOpen, setIsCenterAddressModalOpen] = useState(false);
@@ -153,10 +166,15 @@ function AdminApp() {
           if (session.center) setCenter(session.center);
           if (session.passengers) setPassengers(session.passengers);
           if (session.pairRules) setPairRules(session.pairRules);
-          if (session.result) {
-            setResult(session.result);
-            setScreen('results');
+          // v1 은 배차 결과를 result 하나로 들고 있었다. 그때는 등원뿐이었다.
+          // 그대로 두면 원장님 폰에서 어제 배차가 사라진 것처럼 보인다.
+          const restored = session.results
+            || (session.result ? { inbound: session.result, outbound: null } : null);
+          if (restored) {
+            setResults({ inbound: restored.inbound || null, outbound: restored.outbound || null });
+            if (restored.inbound || restored.outbound) setScreen('results');
           }
+          if (session.tripType === TRIP_OUTBOUND) setTripType(TRIP_OUTBOUND);
         }
       } catch (_) {}
       try {
@@ -195,9 +213,9 @@ function AdminApp() {
     if (!restored) return;
     AsyncStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ vehicles, center, passengers, pairRules, result }),
+      JSON.stringify({ vehicles, center, passengers, pairRules, results, tripType }),
     ).catch(() => {});
-  }, [restored, vehicles, center, passengers, pairRules, result]);
+  }, [restored, vehicles, center, passengers, pairRules, results, tripType]);
 
   // 탑승 완료와 배차 확인은 서로를 기다리지 않는다.
   // 예전에는 Promise.all 이라 탑승 완료 조회가 한 번 실패하면 배차 확인까지
@@ -207,8 +225,8 @@ function AdminApp() {
     setSyncing(true);
     try {
       const [completions, ackList] = await Promise.allSettled([
-        fetchCompletedStopMap(),
-        fetchTodayAcks(),
+        fetchCompletedStopMap(tripType),
+        fetchTodayAcks(tripType),
       ]);
 
       if (completions.status === 'fulfilled') setCompletedStops(completions.value);
@@ -223,7 +241,7 @@ function AdminApp() {
     } finally {
       setSyncing(false);
     }
-  }, []);
+  }, [tripType]);
 
   // 다른 기사님이 탑승 완료나 배차표 확인을 누르면 관제 화면에도 반영되어야 한다.
   // 수파베이스를 직접 구독하는 대신 백엔드를 주기적으로 물어본다.
@@ -254,7 +272,7 @@ function AdminApp() {
       stop();
       subscription.remove();
     };
-  }, [screen, syncLiveState]);
+  }, [screen, tripType, syncLiveState]);
 
   useEffect(() => {
     if (fontsLoaded && mode !== null) SplashScreen.hideAsync().catch(() => {});
@@ -345,6 +363,7 @@ function AdminApp() {
       const asRule = (rule) => ({ passenger_ids: rule.passengerIds });
 
       const response = await optimizeRoutes({
+        trip_type: tripType,
         center: asLocation(center),
         vehicles: vehicles.map((vehicle) => ({
           id: vehicle.id,
@@ -365,7 +384,8 @@ function AdminApp() {
           ...asLocation(item),
           id: item.id,
           detail_address: (item.detailAddress || '').trim(),
-          attending: true,
+          attending: item.attending !== false,
+          attending_outbound: item.attendingOutbound !== false,
           pickup_start: item.pickupStart,
           pickup_end: item.pickupEnd,
           wheelchair: item.wheelchair,
@@ -420,6 +440,7 @@ function AdminApp() {
         vehicle_plate_number: vehicle.plate_number,
         trip_round: tripRound,
         scheduled_pickup: stop.estimated_pickup,
+        trip_type: tripType,
         center_name: center.name,       // 🚨 [신규 장착] 센터명 백엔드로 발사!
         guardian_phone: phone           // 🚨 [신규 장착] 보호자 번호 백엔드로 발사!
       });
@@ -575,9 +596,33 @@ function AdminApp() {
           <Pressable style={[styles.tab, screen === 'input' && styles.activeTab]} onPress={() => setScreen('input')}>
             <Text style={[styles.tabText, screen === 'input' && styles.activeTabText]}>2. 대상자</Text>
           </Pressable>
-          <Pressable style={[styles.tab, screen === 'results' && styles.activeTab]} onPress={() => result && setScreen('results')}>
-            <Text style={[styles.tabText, screen === 'results' && styles.activeTabText, !result && styles.disabledText]}>3. 배차 관제</Text>
+          <Pressable style={[styles.tab, screen === 'results' && styles.activeTab]} onPress={() => setScreen('results')}>
+            <Text style={[styles.tabText, screen === 'results' && styles.activeTabText]}>3. 배차 관제</Text>
           </Pressable>
+        </View>
+
+        {/* 등원과 하원은 명단도 동선도 다르다. 지금 무엇을 짜고 있는지
+            어느 탭에 있든 한눈에 보여야 한다. */}
+        <View style={styles.tripToggle}>
+          {[TRIP_INBOUND, TRIP_OUTBOUND].map((value) => {
+            const active = tripType === value;
+            return (
+              <Pressable
+                key={value}
+                style={[styles.tripOption, active && styles.tripOptionOn]}
+                onPress={() => setTripType(value)}
+              >
+                <Icon
+                  name={value === TRIP_INBOUND ? 'inbound' : 'outbound'}
+                  size={16}
+                  tint={active ? '#FFFFFF' : color.textSecondary}
+                />
+                <Text style={[styles.tripOptionText, active && styles.tripOptionTextOn]}>
+                  {tripLabel(value)} 배차
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -673,11 +718,29 @@ function AdminApp() {
               {/* 계산 버튼이 화면 아래에 떠 있어 그 밑이 가린다. 그만큼 자리를 비운다. */}
               <View style={{ height: ctaClearance }} />
             </>
+          ) : !result ? (
+            <View style={styles.emptyResult}>
+              <Icon
+                name={tripType === TRIP_OUTBOUND ? 'outbound' : 'inbound'}
+                size={28}
+                tint={color.textSecondary}
+              />
+              <Text style={styles.emptyResultTitle}>
+                {tripLabel(tripType)} 배차를 아직 계산하지 않았습니다
+              </Text>
+              <Text style={styles.emptyResultBody}>
+                [2. 대상자] 에서 {tripLabel(tripType)} 탑승 여부를 확인한 뒤
+                {'\n'}아래 [최적 배차 계산하기] 를 눌러 주세요.
+              </Text>
+              <Pressable style={styles.emptyResultButton} onPress={() => setScreen('input')}>
+                <Text style={styles.emptyResultButtonText}>대상자 확인하러 가기</Text>
+              </Pressable>
+            </View>
           ) : (
             <>
               <View style={styles.resultsHeading}>
                 <View>
-                  <Text style={styles.sectionTitle}>오늘의 배차 관제</Text>
+                  <Text style={styles.sectionTitle}>오늘의 {tripLabel(tripType)} 관제</Text>
                   <Text style={styles.sectionCaption}>차량별 픽업 순서와 도착 예정 시각</Text>
                 </View>
                 <Pressable onPress={() => setScreen('input')}><Text style={styles.editLink}>입력 수정</Text></Pressable>
@@ -775,6 +838,12 @@ const styles = StyleSheet.create({
   statusPill: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 999, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E4E7EC' },
   statusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#3BB273', marginRight: 5 },
   statusText: { color: '#667085', fontSize: 12, fontWeight: '600' },
+  // 선택된 쪽은 Deep Navy 로 채우고, 나머지는 흰 배경에 테두리만 둔다.
+  tripToggle: { flexDirection: 'row', gap: 8, marginHorizontal: 18, marginBottom: 12 },
+  tripOption: { flex: 1, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', paddingVertical: 11, borderRadius: 12, borderWidth: 1, borderColor: '#E4E7EC', backgroundColor: '#FFFFFF' },
+  tripOptionOn: { backgroundColor: '#0D2540', borderColor: '#0D2540' },
+  tripOptionText: { color: '#667085', fontSize: 14, fontWeight: '700' },
+  tripOptionTextOn: { color: '#FFFFFF' },
   tabs: { marginHorizontal: 18, backgroundColor: '#E4E7EC', borderRadius: 13, padding: 4, flexDirection: 'row' },
   tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
   activeTab: { backgroundColor: '#FFFFFF' },
@@ -809,6 +878,11 @@ const styles = StyleSheet.create({
   optimizeButtonText: { color: '#FFFFFF', fontSize: 17, fontWeight: '900' },
   disabledButton: { opacity: 0.6 },
   hint: { color: '#98A2B3', fontSize: 11, textAlign: 'center', marginTop: 10 },
+  emptyResult: { alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E4E7EC', paddingVertical: 32, paddingHorizontal: 24 },
+  emptyResultTitle: { color: '#0D2540', fontSize: 16, fontWeight: '700', marginTop: 12, textAlign: 'center' },
+  emptyResultBody: { color: '#667085', fontSize: 13, lineHeight: 20, marginTop: 8, textAlign: 'center' },
+  emptyResultButton: { backgroundColor: '#0D2540', borderRadius: 12, paddingHorizontal: 20, paddingVertical: 12, marginTop: 18 },
+  emptyResultButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   resultsHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   editLink: { color: '#0BA38E', fontWeight: '800', fontSize: 13 },
   capacitySummary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#E9F7EF', borderRadius: 14, padding: 14, marginBottom: 14 },
