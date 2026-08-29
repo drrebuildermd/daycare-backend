@@ -135,8 +135,9 @@ with TestClient(main.app) as client:
         placed = trip_of(r.json())
         check("결석자가 배차에서 빠짐", "P001" not in placed, str(sorted(placed)))
         check("출석 3명만 배차됨", len(placed) == 3, str(len(placed)))
-        check("결석 안내문구 추가됨",
-              any("결석" in n for n in r.json()["notices"]), "")
+        check("미탑승 안내문구 추가됨",
+              any("미탑승" in n for n in r.json()["notices"]),
+              str(r.json()["notices"]))
 
     print("--- 7. 결석자를 가리키는 규칙은 거절 ---")
     r = client.post("/api/optimize", json=build(

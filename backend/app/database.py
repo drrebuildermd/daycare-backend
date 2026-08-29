@@ -50,6 +50,7 @@ def upsert_completion(
     now = datetime.now(KST).replace(microsecond=0)
     row = {
         "service_date": now.date().isoformat(),
+        "trip_type": payload.trip_type,
         "passenger_id": payload.passenger_id,
         "passenger_name": payload.passenger_name,
         "vehicle_id": payload.vehicle_id,
@@ -62,10 +63,11 @@ def upsert_completion(
     }
     try:
         # 같은 날 같은 어르신을 다시 찍으면 새 줄을 만들지 않고 갱신한다.
+        # trip_type 이 키에 들어가야 오후 하차가 오전 탑승을 덮어쓰지 않는다.
         result = (
             get_supabase()
             .table(TABLE)
-            .upsert(row, on_conflict="service_date,passenger_id")
+            .upsert(row, on_conflict="service_date,passenger_id,trip_type")
             .execute()
         )
     except APIError as error:
@@ -79,14 +81,23 @@ def upsert_completion(
 
 
 def list_completions(
-    service_date: date, settings: Settings
+    service_date: date, settings: Settings, trip_type: str | None = None
 ) -> list[RideCompletionRecord]:
+    """그날의 탑승·하차 기록. trip_type 을 주면 그쪽만 걸러 준다.
+
+    관제 화면은 보고 있는 쪽만 필요하고, 송영 일지는 둘 다 필요하다.
+    """
     try:
-        result = (
+        query = (
             get_supabase()
             .table(TABLE)
             .select("*")
             .eq("service_date", service_date.isoformat())
+        )
+        if trip_type:
+            query = query.eq("trip_type", trip_type)
+        result = (
+            query
             .order("completed_at", desc=False)
             .order("passenger_name", desc=False)
             .execute()
@@ -101,6 +112,8 @@ def list_completions(
 def _to_record(row: dict) -> RideCompletionRecord:
     return RideCompletionRecord(
         service_date=str(row["service_date"]),
+        # 예전 행에는 이 칸이 없다. 그때는 등원만 있었다.
+        trip_type=row.get("trip_type") or "inbound",
         passenger_id=row["passenger_id"],
         passenger_name=row["passenger_name"],
         vehicle_id=row["vehicle_id"],
@@ -125,7 +138,9 @@ def _to_record(row: dict) -> RideCompletionRecord:
 # (= 예전처럼 매번 발송) 나머지는 그대로 돈다. init_database 의 필수 목록에
 # 넣지 않은 이유다.
 # ──────────────────────────────────────────────────────────────
-def was_dispatch_sms_sent(service_date: date, vehicle_id: str, signature: str) -> bool:
+def was_dispatch_sms_sent(
+    service_date: date, vehicle_id: str, signature: str, trip_type: str = "inbound"
+) -> bool:
     """이미 같은 내용으로 보냈으면 True."""
     result = (
         get_supabase()
@@ -133,6 +148,7 @@ def was_dispatch_sms_sent(service_date: date, vehicle_id: str, signature: str) -
         .select("signature")
         .eq("service_date", service_date.isoformat())
         .eq("vehicle_id", vehicle_id)
+        .eq("trip_type", trip_type)
         .limit(1)
         .execute()
     )
@@ -140,14 +156,17 @@ def was_dispatch_sms_sent(service_date: date, vehicle_id: str, signature: str) -
     return bool(rows) and rows[0].get("signature") == signature
 
 
-def mark_dispatch_sms_sent(service_date: date, vehicle_id: str, signature: str) -> None:
-    """보냈다고 기록한다. 같은 날 같은 차량이면 덮어쓴다."""
+def mark_dispatch_sms_sent(
+    service_date: date, vehicle_id: str, signature: str, trip_type: str = "inbound"
+) -> None:
+    """보냈다고 기록한다. 같은 날 같은 차량, 같은 운행이면 덮어쓴다."""
     get_supabase().table(DISPATCH_SMS_TABLE).upsert(
         {
             "service_date": service_date.isoformat(),
+            "trip_type": trip_type,
             "vehicle_id": vehicle_id,
             "signature": signature,
             "sent_at": datetime.now(KST).replace(microsecond=0).isoformat(),
         },
-        on_conflict="service_date,vehicle_id",
+        on_conflict="service_date,vehicle_id,trip_type",
     ).execute()

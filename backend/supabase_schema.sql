@@ -7,6 +7,10 @@
 -- 1. 송영 완료 기록 (기존 SQLite ride_completions 이관)
 -- ---------------------------------------------------------------------------
 create table if not exists public.ride_completions (
+  -- 등원(inbound) 인지 하원(outbound) 인지.
+  -- 이 칸이 유일키에 들어가야 오후 기록이 오전 기록을 덮어쓰지 않는다.
+  trip_type      text        not null default 'inbound'
+                   check (trip_type in ('inbound', 'outbound')),
   id                   bigserial primary key,
   -- 운행일은 KST 기준 날짜다. 서버가 UTC로 돌아도 한국 날짜로 묶이도록
   -- 애플리케이션에서 계산해 넣는다.
@@ -22,7 +26,8 @@ create table if not exists public.ride_completions (
   created_at           timestamptz not null default now(),
   updated_at           timestamptz not null default now(),
   -- 같은 날 같은 어르신은 한 줄만. 재탭 시 갱신되도록 upsert 키로 쓴다.
-  constraint ride_completions_day_passenger_key unique (service_date, passenger_id)
+  constraint ride_completions_day_passenger_trip_key
+    unique (service_date, passenger_id, trip_type)
 );
 
 create index if not exists idx_ride_completions_date_time
@@ -54,12 +59,16 @@ create index if not exists idx_driver_devices_driver
 -- 푸시 알림 본문에는 경로를 다 담을 수 없다(Expo 페이로드 4KB 제한).
 -- 알림에는 vehicle_id만 넣고, 실제 경로는 앱이 여기서 받아간다.
 create table if not exists public.dispatches (
+  -- 등원(inbound) 인지 하원(outbound) 인지.
+  -- 이 칸이 유일키에 들어가야 오후 기록이 오전 기록을 덮어쓰지 않는다.
+  trip_type      text        not null default 'inbound'
+                   check (trip_type in ('inbound', 'outbound')),
   id           bigserial primary key,
   service_date date        not null,
   payload      jsonb       not null,
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),
-  constraint dispatches_service_date_key unique (service_date)
+  constraint dispatches_date_trip_key unique (service_date, trip_type)
 );
 
 -- ---------------------------------------------------------------------------
@@ -68,6 +77,10 @@ create table if not exists public.dispatches (
 -- 기사님이 오늘 배차표를 봤다는 것을 관리자 화면에서 알 수 있어야
 -- "못 봤다 / 전달했다" 하는 현장 소통 오류가 줄어든다.
 create table if not exists public.dispatch_acks (
+  -- 등원(inbound) 인지 하원(outbound) 인지.
+  -- 이 칸이 유일키에 들어가야 오후 기록이 오전 기록을 덮어쓰지 않는다.
+  trip_type      text        not null default 'inbound'
+                   check (trip_type in ('inbound', 'outbound')),
   id              bigserial primary key,
   service_date    date        not null,
   vehicle_id      text        not null,
@@ -76,7 +89,8 @@ create table if not exists public.dispatch_acks (
   acknowledged_at timestamptz not null,
   created_at      timestamptz not null default now(),
   -- 같은 날 같은 차량은 한 줄만. 다시 눌러도 시각만 갱신된다.
-  constraint dispatch_acks_day_vehicle_key unique (service_date, vehicle_id)
+  constraint dispatch_acks_day_vehicle_trip_key
+    unique (service_date, vehicle_id, trip_type)
 );
 
 create index if not exists idx_dispatch_acks_date
@@ -93,6 +107,7 @@ create table if not exists public.vehicles (
   vehicle_type    text        not null,
   plate_number    text        not null,
   driver_name     text,
+  driver_phone    text,
   capacity        integer     not null,
   -- 'center' 면 센터에서, 'custom' 이면 아래 주소에서 1회차를 시작한다.
   start_type      text        not null default 'center'
@@ -116,6 +131,9 @@ alter table public.vehicles add column if not exists start_longitude double prec
 -- ---------------------------------------------------------------------------
 create table if not exists public.passengers (
   id             bigserial primary key,
+  -- 앱이 만드는 어르신 식별자. 이 표는 날짜별 기록이 아니라 '지금 명단'의
+  -- 거울이므로 한 어르신당 한 줄이면 된다. 이 키로 덮어쓴다.
+  passenger_id   text not null,
   name           text not null,
   address        text,
   detail_address text,
@@ -124,7 +142,20 @@ create table if not exists public.passengers (
   pickup_start   text,
   pickup_end     text,
   is_wheelchair  boolean default false,
-  created_at     timestamptz not null default now()
+  guardian_phone   text,
+  passenger_phone  text,
+  primary_contact  text not null default 'guardian'
+                     check (primary_contact in ('guardian', 'self')),
+  is_sms_opt_in    boolean not null default true,
+  -- 하원 희망 시각. 비어 있으면 서버가 센터 공통 기본값으로 채운다.
+  dropoff_start    text,
+  dropoff_end      text,
+  -- 등원과 하원의 탑승 여부는 다를 수 있다.
+  is_attending_inbound   boolean not null default true,
+  is_attending_outbound  boolean not null default true,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now(),
+  constraint passengers_passenger_id_key unique (passenger_id)
 );
 
 -- 이미 테이블이 있는 경우를 대비해 컬럼만 따로 보강한다.
@@ -183,35 +214,25 @@ alter table public.passengers add column if not exists detail_address text;
 -- 이미 만들어 둔 테이블에 칸을 더하는 것이라 몇 번을 실행해도 안전합니다.
 -- ============================================================
 
--- 1) 탑승 완료 알림을 원치 않는 보호자가 있다. 명단에서 지우는 대신 이 스위치로 끈다.
-alter table public.passengers
-  add column if not exists is_sms_opt_in boolean not null default true;
+-- 아래는 이미 위 테이블 정의에 들어갔다. 기존 DB 를 옮길 때만 쓴다.
+-- 새로 까는 경우에는 실행할 필요가 없다.
 
--- 2) 기사님 📞 버튼이 누구에게 걸지.
---    'guardian' 이면 보호자, 'self' 면 어르신 본인 번호로 건다.
-alter table public.passengers
-  add column if not exists guardian_phone   text;
-alter table public.passengers
-  add column if not exists passenger_phone  text;
-alter table public.passengers
-  add column if not exists primary_contact  text not null default 'guardian'
-    check (primary_contact in ('guardian', 'self'));
-
--- 3) 배차가 확정되면 이 번호로 안내 문자를 보낸다.
-alter table public.vehicles
-  add column if not exists driver_phone text;
-
--- 4) 배차 확정 문자를 누구에게 언제 보냈는지.
+-- 배차 확정 문자를 누구에게 언제 보냈는지.
 --    원장님은 조건을 바꿔가며 배차를 여러 번 계산한다. 그때마다 문자가 나가면
 --    요금이 새고 기사님도 지친다. 기사님별 동선을 지문(signature)으로 남겨두고
 --    같으면 건너뛴다.
 create table if not exists public.driver_dispatch_sms (
+  -- 등원(inbound) 인지 하원(outbound) 인지.
+  -- 이 칸이 유일키에 들어가야 오후 기록이 오전 기록을 덮어쓰지 않는다.
+  trip_type      text        not null default 'inbound'
+                   check (trip_type in ('inbound', 'outbound')),
   id           bigserial primary key,
   service_date date        not null,
   vehicle_id   text        not null,
   signature    text        not null,
   sent_at      timestamptz not null default now(),
-  constraint driver_dispatch_sms_date_vehicle_key unique (service_date, vehicle_id)
+  constraint driver_dispatch_sms_date_vehicle_trip_key
+    unique (service_date, vehicle_id, trip_type)
 );
 
 alter table public.driver_dispatch_sms enable row level security;

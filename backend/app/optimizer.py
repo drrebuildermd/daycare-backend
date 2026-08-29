@@ -146,12 +146,38 @@ def _kakao_navi_url(destination: ResolvedLocation) -> str:
     )
 
 
+def trip_endpoints(home_node: int, round_number: int, trip_type: str) -> tuple[int, int]:
+    """이 회차가 어느 노드에서 떠나 어느 노드에서 끝나는지.
+
+    home_node 는 자차 출발지 노드다. 센터 차량이면 0(센터)이라 아래 규칙이
+    자동으로 '센터 → 센터'로 접힌다. 차량 종류로 분기하지 않는 이유다.
+
+    등원 — 어르신을 센터로 모셔온다. 그래서 늘 센터에서 끝난다.
+      자차 1회차   자택 → 센터      (기사님이 집에서 바로 출근길에 태운다)
+      자차 2회차   센터 → 센터      (1회차를 마치고 센터에 있다)
+      센터차량     센터 → 센터
+
+    하원 — 어르신을 댁에 모셔다드린다. 그래서 늘 센터에서 떠난다.
+      자차 1회차   센터 → 센터      (2회차를 더 돌아야 하니 복귀한다)
+      자차 2회차   센터 → 자택      (마지막 어르신을 내려드리고 퇴근한다)
+      센터차량     센터 → 센터
+
+    자차 하원에서 2회차를 돌지 않아도 기사님은 결국 집으로 간다. 그 빈 이동도
+    거리 비용에 넣어 두면(ConsiderEmptyRouteCostsForVehicle) 솔버가 2회차를
+    쓸지 말지를 그 비용까지 견줘서 정한다.
+    """
+    if trip_type == "outbound":
+        return 0, (home_node if round_number == 2 else 0)
+    return (home_node if round_number == 1 else 0), 0
+
+
 def optimize_routes(
     request: OptimizeRequest,
     resolved: list[ResolvedLocation],
     settings: Settings,
 ) -> OptimizeResponse:
     started = time.perf_counter()
+    trip_type = request.trip_type
     passenger_count = len(request.passengers)
     # 자차 출발지는 어르신 노드 뒤에 순서대로 붙어 있다.
     # main.py 가 [센터, *어르신, *커스텀출발지] 순으로 지오코딩해 넘긴다.
@@ -203,17 +229,18 @@ def optimize_routes(
     # 노드 0은 센터, 1..n은 어르신, 그 뒤는 자차 출발지.
     # 물리 차량 한 대당 두 개의 라우팅 차량(1·2회차)을 만들고,
     # 아래 제약으로 두 회차를 시간 순으로 묶는다.
+    def is_passenger_node(node: int) -> bool:
+        return 1 <= node <= passenger_count
+
     distance_m, travel_minutes = _matrices(resolved, settings)
     trip_specs = [(vehicle, round_number) for vehicle in vehicles for round_number in (1, 2)]
 
-    # 자차 출발은 1회차에만 적용한다. 2회차는 이미 센터에 돌아와 있으므로
-    # 센터에서 출발하는 것이 현장 동선과 맞다.
-    trip_starts = [
-        vehicle.start_node if round_number == 1 else 0
+    endpoints = [
+        trip_endpoints(vehicle.start_node, round_number, trip_type)
         for vehicle, round_number in trip_specs
     ]
-    # 도착지는 항상 센터다. 어르신을 센터로 모셔오는 것이 송영이다.
-    trip_ends = [0] * len(trip_specs)
+    trip_starts = [start for start, _ in endpoints]
+    trip_ends = [end for _, end in endpoints]
     manager = pywrapcp.RoutingIndexManager(
         len(resolved), len(trip_specs), trip_starts, trip_ends
     )
@@ -242,8 +269,11 @@ def optimize_routes(
 
     for node, passenger in enumerate(request.passengers, start=1):
         index = manager.NodeToIndex(node)
+        window_start, window_end = passenger.window(
+            trip_type, settings.dropoff_window_start, settings.dropoff_window_end
+        )
         time_dimension.CumulVar(index).SetRange(
-            parse_hhmm(passenger.pickup_start), parse_hhmm(passenger.pickup_end)
+            parse_hhmm(window_start), parse_hhmm(window_end)
         )
 
     for trip_index in range(len(trip_specs)):
@@ -255,6 +285,11 @@ def optimize_routes(
         routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(end_index))
         # A second run costs extra, helping the solver avoid unnecessary runs.
         routing.SetFixedCostOfVehicle(0 if trip_index % 2 == 0 else 20_000, trip_index)
+        # 출발지와 도착지가 다른 회차는, 어르신을 태우지 않아도 그 거리를 실제로 달린다.
+        # 자차 하원 2회차가 그렇다. 이 비용을 세지 않으면 솔버는 그 이동을 공짜로 보고
+        # 2회차를 쓸지 말지를 잘못 저울질한다.
+        if trip_starts[trip_index] != trip_ends[trip_index]:
+            routing.SetVehicleUsedWhenEmpty(True, trip_index)
 
     demands = [0] + [1] * passenger_count
     demands += [0] * (len(resolved) - len(demands))
@@ -332,7 +367,8 @@ def optimize_routes(
                 next_index = solution.Value(routing.NextVar(index))
                 route_distance += distance_callback(index, next_index)
                 node = manager.IndexToNode(next_index)
-                if node != 0:
+                # 어르신 노드는 1..n 뿐이다. 0(센터)과 그 뒤(자차 출발지·도착지)는 아니다.
+                if is_passenger_node(node):
                     route_nodes.append(node)
                 index = next_index
             return_time = solution.Value(time_dimension.CumulVar(index))
@@ -344,7 +380,7 @@ def optimize_routes(
                 while not routing.IsEnd(index):
                     index = solution.Value(routing.NextVar(index))
                     node = manager.IndexToNode(index)
-                    if node == 0:
+                    if not is_passenger_node(node):
                         continue
                     sequence += 1
                     passenger = request.passengers[node - 1]
@@ -364,16 +400,25 @@ def optimize_routes(
                             latitude=location.latitude,
                             longitude=location.longitude,
                             wheelchair=passenger.wheelchair,
-                            requested_window=f"{passenger.pickup_start}~{passenger.pickup_end}",
+                            requested_window="{}~{}".format(
+                                *passenger.window(
+                                    trip_type,
+                                    settings.dropoff_window_start,
+                                    settings.dropoff_window_end,
+                                )
+                            ),
                             estimated_pickup=format_hhmm(pickup_minute),
                             kakao_navi_url=_kakao_navi_url(location),
                         )
                     )
             total_distance += route_distance
+            start_node, end_node = endpoints[trip_index]
             trips.append(
                 TripResult(
                     round=round_number,
                     used=used,
+                    origin_name=resolved[start_node].name,
+                    destination_name=resolved[end_node].name,
                     passenger_count=len(route_nodes),
                     capacity=vehicle.capacity,
                     departure_time=format_hhmm(departure) if used else None,
@@ -405,6 +450,7 @@ def optimize_routes(
 
     center_location = resolved[0]
     return OptimizeResponse(
+        trip_type=trip_type,
         status="optimal_or_feasible",
         center=CenterResult(
             name=center_location.name,

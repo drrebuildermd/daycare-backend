@@ -11,7 +11,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
 
@@ -46,6 +46,7 @@ from app.models import (
     OptimizeRequest,
     OptimizeResponse,
     RideCompletionCreate,
+    TripType,
     RideCompletionList,
     RideCompletionRecord,
 )
@@ -161,8 +162,9 @@ def send_test_sms(
     target_number: str,
     center_name: str,
     sms_opt_in: bool = True,
+    trip_type: str = "inbound",
 ):
-    """탑승 완료를 보호자에게 알린다."""
+    """탑승(등원) 또는 하차(하원)를 보호자에게 알린다."""
     # 알림을 원치 않는 보호자가 있다. 명단에서 지우는 대신 이 스위치로 끈다.
     if not sms_opt_in:
         print(f"[문자 건너뜀] {passenger_name} 어르신은 알림 수신이 꺼져 있습니다.")
@@ -174,9 +176,15 @@ def send_test_sms(
         print(f"[문자 건너뜀] {passenger_name} 어르신의 보호자 번호가 없습니다.")
         return (False, "보호자 연락처가 없어 발송하지 않았습니다.")
 
+    # 하원은 '탑승'이 아니라 '댁에 도착'이다. 문구가 같으면 보호자가 혼란스럽다.
+    body = (
+        f"{passenger_name} 어르신이 댁에 안전하게 도착하셨습니다."
+        if trip_type == "outbound"
+        else f"{passenger_name} 어르신이 무사히 차량에 탑승하셨습니다."
+    )
     return _solapi_send(
         target_number,
-        f"[{center_name or '주야간보호센터'}] {passenger_name} 어르신이 무사히 차량에 탑승하셨습니다.",
+        f"[{center_name or '주야간보호센터'}] {body}",
     )
 def _dispatch_sms_signature(vehicle) -> str:
     """기사님 한 분의 오늘 동선을 한 줄로 요약한다.
@@ -200,6 +208,8 @@ def _notify_drivers_by_sms(response: OptimizeResponse) -> list[str]:
     """
     center_name = response.center.name or "주야간보호센터"
     service_date = today_kst()
+    trip_type = response.trip_type
+    trip_label = "하원" if trip_type == "outbound" else "등원"
     notices: list[str] = []
     sent_count = 0
 
@@ -210,11 +220,15 @@ def _notify_drivers_by_sms(response: OptimizeResponse) -> list[str]:
 
         digits = _digits(vehicle.driver_phone)
         if len(digits) < 10:
-            notices.append(f"{vehicle.plate_number} 기사님 연락처가 없어 배차 문자를 보내지 못했습니다.")
+            notices.append(
+                f"{vehicle.plate_number} 기사님 연락처가 없어 {trip_label} 문자를 보내지 못했습니다."
+            )
             continue
 
         try:
-            if was_dispatch_sms_sent(service_date, vehicle.vehicle_id, signature):
+            if was_dispatch_sms_sent(
+                service_date, vehicle.vehicle_id, signature, trip_type
+            ):
                 continue
         except Exception as error:  # noqa: BLE001 - 중복 확인 실패가 배차를 막으면 안 된다
             print(f"[배차 문자] 중복 확인 실패, 그냥 보냅니다: {error}")
@@ -224,7 +238,7 @@ def _notify_drivers_by_sms(response: OptimizeResponse) -> list[str]:
             sent, message = _solapi_send(
                 digits,
                 f"[{center_name}] {driver + ' ' if driver else ''}기사님, "
-                f"오늘 배차표가 확정되었습니다. 앱에서 확인해 주세요.",
+                f"오늘 {trip_label} 배차표가 확정되었습니다. 앱에서 확인해 주세요.",
             )
         except Exception as error:  # noqa: BLE001 - 문자 실패가 배차를 무효화하면 안 된다
             print(f"[배차 문자 실패] {vehicle.plate_number}: {error}")
@@ -233,7 +247,9 @@ def _notify_drivers_by_sms(response: OptimizeResponse) -> list[str]:
         if sent:
             sent_count += 1
             try:
-                mark_dispatch_sms_sent(service_date, vehicle.vehicle_id, signature)
+                mark_dispatch_sms_sent(
+                    service_date, vehicle.vehicle_id, signature, trip_type
+                )
             except Exception as error:  # noqa: BLE001
                 # 기록에 실패하면 다음 계산 때 한 번 더 갈 수 있다. 안 가는 것보다 낫다.
                 print(f"[배차 문자] 발송 기록 실패: {error}")
@@ -241,14 +257,24 @@ def _notify_drivers_by_sms(response: OptimizeResponse) -> list[str]:
             notices.append(f"{vehicle.plate_number} 기사님 배차 문자 실패: {message}")
 
     if sent_count:
-        notices.insert(0, f"배차표 확정 문자를 기사님 {sent_count}분께 보냈습니다.")
+        notices.insert(0, f"{trip_label} 배차표 확정 문자를 기사님 {sent_count}분께 보냈습니다.")
     return notices
 
 
 def _archive_passengers(request: OptimizeRequest, resolved) -> None:
-    """어르신 명단을 Supabase에 백업한다. 실패해도 배차 결과는 그대로 반환한다."""
+    """어르신 명단을 Supabase에 백업한다. 실패해도 배차 결과는 그대로 반환한다.
+
+    이 표는 날짜별 기록이 아니라 '지금 명단'의 거울이다. 원장님 폰이 고장났을 때
+    되살리기 위한 것이므로 한 어르신당 한 줄이면 된다.
+
+    예전에는 insert 만 해서 배차를 계산할 때마다 명단 전체가 새 줄로 쌓였다.
+    7일 쓰는 동안 36명이 251줄이 됐다. passenger_id 를 키로 덮어쓴다.
+    """
+    now = datetime.now(KST).replace(microsecond=0).isoformat()
     rows = [
         {
+            "passenger_id": passenger.id or passenger.name,
+            "updated_at": now,
             "name": passenger.name,
             "address": passenger.address,
             "detail_address": passenger.detail_address,
@@ -261,13 +287,19 @@ def _archive_passengers(request: OptimizeRequest, resolved) -> None:
             "passenger_phone": passenger.passenger_phone,
             "primary_contact": passenger.primary_contact,
             "is_sms_opt_in": passenger.sms_opt_in,
+            "dropoff_start": passenger.dropoff_start,
+            "dropoff_end": passenger.dropoff_end,
+            "is_attending_inbound": passenger.attending,
+            "is_attending_outbound": passenger.attending_outbound,
         }
         for passenger, location in zip(request.passengers, resolved[1:])
     ]
     if not rows:
         return
     try:
-        get_supabase().table("passengers").insert(rows).execute()
+        get_supabase().table("passengers").upsert(
+            rows, on_conflict="passenger_id"
+        ).execute()
     except Exception as error:  # noqa: BLE001 - 백업 실패가 배차를 막으면 안 된다
         print(f"[Supabase 백업 실패] {error}")
 
@@ -373,11 +405,18 @@ async def send_dispatch(result: OptimizeResponse) -> DispatchNotifyResult:
 
 
 @app.get("/api/dispatch/today", response_model=DispatchToday)
-def read_today_dispatch() -> DispatchToday:
-    """기사님 폰이 본인 동선을 그리려고 받아가는 오늘의 배차."""
+def read_today_dispatch(
+    trip_type: TripType = Query("inbound"),
+) -> DispatchToday:
+    """기사님 폰이 본인 동선을 그리려고 받아가는 오늘의 배차.
+
+    trip_type 을 안 보내면 등원을 준다. 구형 앱이 그대로 동작하게 하려는 것이다.
+    """
     service_date = today_kst()
     return DispatchToday(
-        service_date=service_date.isoformat(), result=load_dispatch(service_date)
+        service_date=service_date.isoformat(),
+        trip_type=trip_type,
+        result=load_dispatch(service_date, trip_type),
     )
 
 
@@ -388,12 +427,15 @@ def acknowledge_today_dispatch(payload: DispatchAckCreate) -> DispatchAckRecord:
 
 
 @app.get("/api/dispatch/acks/today", response_model=DispatchAckList)
-def read_today_acknowledgements() -> DispatchAckList:
+def read_today_acknowledgements(
+    trip_type: TripType = Query("inbound"),
+) -> DispatchAckList:
     """관리자 관제 화면이 어느 차량이 확인했는지 보려고 받아간다."""
     service_date = today_kst()
     return DispatchAckList(
         service_date=service_date.isoformat(),
-        records=list_acknowledgements(service_date),
+        trip_type=trip_type,
+        records=list_acknowledgements(service_date, trip_type),
     )
 
 
@@ -417,11 +459,20 @@ async def run_optimization(
 ) -> OptimizeResponse:
     # 결석자는 지오코딩 전에 걷어낸다. 뒤에 두면 카카오 호출을 헛되이 쓰고,
     # optimize_routes가 전제하는 '노드 번호 = 어르신 순번'도 어긋난다.
-    attending = [passenger for passenger in request.passengers if passenger.attending]
+    #
+    # 등원과 하원은 타는 사람이 다르다. 아침엔 보호자가 모셔오고 오후엔
+    # 센터 차를 타는 분이 있어 각각 따로 본다.
+    label = "하원" if request.trip_type == "outbound" else "등원"
+    attending = [
+        passenger
+        for passenger in request.passengers
+        if passenger.is_attending(request.trip_type)
+    ]
     absent_count = len(request.passengers) - len(attending)
     if not attending:
         raise HTTPException(
-            status_code=422, detail="출석한 어르신이 없습니다. 출석 여부를 확인해 주세요."
+            status_code=422,
+            detail=f"{label} 대상 어르신이 없습니다. 탑승 여부를 확인해 주세요.",
         )
     request = request.model_copy(update={"passengers": attending})
 
@@ -437,7 +488,7 @@ async def run_optimization(
     )
     response = optimize_routes(request, resolved, settings)
     if absent_count:
-        response.notices.append(f"결석 처리된 {absent_count}명은 배차에서 제외했습니다.")
+        response.notices.append(f"{label} 미탑승 {absent_count}명은 배차에서 제외했습니다.")
     _archive_passengers(request, resolved)
     _archive_vehicles(request, resolved)
     # 여기서는 문자를 보내지 않는다. 계산은 원장님이 결과를 보려고 여러 번
@@ -462,6 +513,7 @@ def create_ride_completion(
             target_number=payload.guardian_phone,
             center_name=payload.center_name,
             sms_opt_in=payload.sms_opt_in,
+            trip_type=payload.trip_type,
         )
     except Exception as error:  # noqa: BLE001 - 문자 실패가 탑승 기록을 무효화하면 안 된다
         print(f"[문자 발송 실패] {payload.passenger_name}: {error}")
@@ -476,12 +528,19 @@ def create_ride_completion(
 
 @app.get("/api/ride-completions/today", response_model=RideCompletionList)
 def read_today_completions(
+    trip_type: TripType | None = Query(None),
     settings: Settings = Depends(get_settings),
 ) -> RideCompletionList:
+    """오늘의 탑승·하차 기록.
+
+    trip_type 을 주면 그쪽만, 안 주면 등원·하원을 모두 준다.
+    구형 앱은 안 보내므로 지금까지처럼 전부 받는다.
+    """
     service_date: date = today_kst()
     return RideCompletionList(
         service_date=service_date.isoformat(),
-        records=list_completions(service_date, settings),
+        trip_type=trip_type,
+        records=list_completions(service_date, settings, trip_type),
     )
 
 

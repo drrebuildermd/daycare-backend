@@ -1,5 +1,10 @@
 from typing import Annotated, Literal
 
+# 등원(inbound)은 어르신을 센터로 모셔오는 운행,
+# 하원(outbound)은 댁으로 모셔다드리는 운행이다.
+# 기본값을 등원으로 두면 이 값을 모르는 구형 앱이 그대로 동작한다.
+TripType = Literal["inbound", "outbound"]
+
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
@@ -42,9 +47,15 @@ class PassengerInput(LocationInput):
     # 동/호수. 지오코딩에는 쓰지 않고 기사님 화면 표시용으로만 전달한다.
     detail_address: str | None = Field(default=None, max_length=100)
     # 결석해도 명단에서 지우지 않는다. 배차 대상에서만 빠진다.
+    # 아침엔 보호자가 모셔오고 오후엔 센터 차를 타는 분이 있어
+    # 등원과 하원의 탑승 여부를 따로 둔다.
     attending: bool = True
+    attending_outbound: bool = True
     pickup_start: str
     pickup_end: str
+    # 하원 희망 시각. 비워두면 센터 공통 기본값을 서버가 채운다.
+    dropoff_start: str | None = None
+    dropoff_end: str | None = None
     wheelchair: bool = False
     guardian_phone: str | None = Field(default=None, max_length=20)
     # 어르신 본인 휴대폰. 대표 연락처를 '본인'으로 두면 여기로 전화한다.
@@ -60,11 +71,31 @@ class PassengerInput(LocationInput):
         parse_hhmm(value)
         return value
 
+    @field_validator("dropoff_start", "dropoff_end")
+    @classmethod
+    def validate_optional_time(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        parse_hhmm(value)
+        return value
+
     @model_validator(mode="after")
     def validate_window(self):
         if parse_hhmm(self.pickup_start) > parse_hhmm(self.pickup_end):
             raise ValueError("픽업 하한 시간은 상한 시간보다 늦을 수 없습니다.")
+        if self.dropoff_start and self.dropoff_end:
+            if parse_hhmm(self.dropoff_start) > parse_hhmm(self.dropoff_end):
+                raise ValueError("하원 하한 시간은 상한 시간보다 늦을 수 없습니다.")
         return self
+
+    def is_attending(self, trip_type: str) -> bool:
+        return self.attending_outbound if trip_type == "outbound" else self.attending
+
+    def window(self, trip_type: str, default_start: str, default_end: str) -> tuple[str, str]:
+        """이 어르신의 시간창. 하원은 값이 없으면 센터 공통 기본값을 쓴다."""
+        if trip_type == "outbound":
+            return (self.dropoff_start or default_start, self.dropoff_end or default_end)
+        return (self.pickup_start, self.pickup_end)
 
 
 class VehicleInput(BaseModel):
@@ -122,6 +153,8 @@ class PairRule(BaseModel):
 
 
 class OptimizeRequest(BaseModel):
+    # 이 배차가 등원인지 하원인지. 구형 앱은 보내지 않으므로 등원으로 본다.
+    trip_type: TripType = "inbound"
     center: LocationInput
     vehicles: list[VehicleInput] = Field(min_length=1)
     passengers: list[PassengerInput] = Field(min_length=1)
@@ -167,6 +200,10 @@ class StopResult(BaseModel):
 
 
 class TripResult(BaseModel):
+    # 이 회차가 실제로 어디서 떠나 어디서 끝나는지.
+    # 하원 마지막 회차는 센터가 아니라 기사님 자택에서 끝난다.
+    origin_name: str | None = None
+    destination_name: str | None = None
     round: int
     used: bool
     passenger_count: int
@@ -202,6 +239,7 @@ class CenterResult(BaseModel):
 
 
 class OptimizeResponse(BaseModel):
+    trip_type: TripType = "inbound"
     status: str
     center: CenterResult
     total_passengers: int
@@ -212,6 +250,8 @@ class OptimizeResponse(BaseModel):
 
 
 class RideCompletionCreate(BaseModel):
+    # 오전 탑승과 오후 하차는 따로 남아야 한다. 같은 키로 저장하면 덮어쓴다.
+    trip_type: TripType = "inbound"
     passenger_id: str = Field(min_length=1, max_length=100)
     passenger_name: str = Field(min_length=1, max_length=100)
     vehicle_id: str = Field(min_length=1, max_length=100)
@@ -243,6 +283,7 @@ class RideCompletionRecord(RideCompletionCreate):
 
 
 class RideCompletionList(BaseModel):
+    trip_type: TripType | None = None
     service_date: str
     records: list[RideCompletionRecord] = Field(default_factory=list)
 
@@ -293,6 +334,7 @@ class DispatchNotifyResult(BaseModel):
 
 
 class DispatchToday(BaseModel):
+    trip_type: TripType = "inbound"
     service_date: str
     result: OptimizeResponse | None = None
 
@@ -300,6 +342,7 @@ class DispatchToday(BaseModel):
 class DispatchAckCreate(BaseModel):
     """기사님이 배차표를 확인했다는 신호."""
 
+    trip_type: TripType = "inbound"
     vehicle_id: str = Field(min_length=1, max_length=100)
     vehicle_label: str = Field(min_length=1, max_length=100)
     driver_name: str | None = Field(default=None, max_length=30)
@@ -311,5 +354,6 @@ class DispatchAckRecord(DispatchAckCreate):
 
 
 class DispatchAckList(BaseModel):
+    trip_type: TripType = "inbound"
     service_date: str
     records: list[DispatchAckRecord] = Field(default_factory=list)

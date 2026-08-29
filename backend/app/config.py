@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     road_distance_factor: float = 1.25
     stop_service_minutes: int = 3
     turnaround_minutes: int = 5
+    # 하원 희망 시각의 센터 공통 기본값.
+    # 어르신마다 따로 받지 않고 한 값으로 묶는다. 센터의 하원 시간은 대개 정해져 있다.
+    dropoff_window_start: str = "15:30"
+    dropoff_window_end: str = "17:00"
     solver_time_limit_seconds: int = 15
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

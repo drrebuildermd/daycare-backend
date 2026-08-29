@@ -82,12 +82,12 @@ def build(driver_phone_a="01011112222", driver_phone_b="01033334444"):
 memory = {}
 
 
-def fake_was_sent(service_date, vehicle_id, signature):
-    return memory.get((service_date, vehicle_id)) == signature
+def fake_was_sent(service_date, vehicle_id, signature, trip_type="inbound"):
+    return memory.get((service_date, vehicle_id, trip_type)) == signature
 
 
-def fake_mark_sent(service_date, vehicle_id, signature):
-    memory[(service_date, vehicle_id)] = signature
+def fake_mark_sent(service_date, vehicle_id, signature, trip_type="inbound"):
+    memory[(service_date, vehicle_id, trip_type)] = signature
 
 
 main.was_dispatch_sms_sent = fake_was_sent
@@ -186,6 +186,36 @@ check(
     "응답 모델에 sms_notices 칸이 있음",
     "sms_notices" in DispatchNotifyResult.model_fields,
 )
+
+
+print()
+print("=== 8. 등원 문자를 보냈다고 하원 문자가 막히면 안 된다 ===")
+
+sent_box.clear()
+memory.clear()
+
+inbound = build()
+inbound.trip_type = "inbound"
+main._notify_drivers_by_sms(inbound)
+after_inbound = len(sent_box)
+check("등원 발송됨", after_inbound >= 1, f"{after_inbound}통")
+
+# 같은 동선이지만 하원이다. 오후에는 따로 알려야 한다.
+outbound = build()
+outbound.trip_type = "outbound"
+sent_box.clear()
+main._notify_drivers_by_sms(outbound)
+check("하원도 따로 발송됨", len(sent_box) >= 1, f"{len(sent_box)}통")
+check("하원 문구에 '하원' 이 들어감",
+      bool(sent_box) and "하원" in sent_box[0][1],
+      sent_box[0][1] if sent_box else "")
+
+# 하원을 다시 계산하면 이번엔 건너뛴다.
+sent_box.clear()
+again = build()
+again.trip_type = "outbound"
+main._notify_drivers_by_sms(again)
+check("같은 하원 재계산은 발송 없음", len(sent_box) == 0, f"{len(sent_box)}통")
 
 
 print()

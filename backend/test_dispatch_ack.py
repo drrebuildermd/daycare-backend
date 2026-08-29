@@ -15,6 +15,19 @@ from app.models import DispatchAckCreate
 SCHEMA = open("supabase_schema.sql", encoding="utf-8").read()
 
 
+def schema_unique(table: str) -> str:
+    """스키마에 적힌 그 표의 유일키를 'a,b,c' 꼴로 돌려준다.
+
+    upsert 의 on_conflict 는 이 값과 정확히 같아야 한다. 다르면 Postgres 가
+    충돌을 못 알아보고 새 줄을 만든다.
+    """
+    body = re.search(
+        rf"create table if not exists public\.{table} \((.*?)\n\);", SCHEMA, re.S
+    ).group(1)
+    columns = re.search(r"unique \(([^)]*)\)", body, re.S).group(1)
+    return ",".join(part.strip() for part in columns.split(","))
+
+
 def schema_columns(table: str) -> set[str]:
     body = re.search(
         rf"create table if not exists public\.{table} \((.*?)\n\);", SCHEMA, re.S
@@ -86,7 +99,8 @@ record = dispatch.acknowledge_dispatch(
 upsert = next(c for c in calls if c["op"] == "upsert")
 check("dispatch_acks 테이블 사용", upsert["table"] == "dispatch_acks", upsert["table"])
 check("on_conflict 가 유니크 제약과 일치",
-      upsert["on_conflict"] == "service_date,vehicle_id", upsert["on_conflict"])
+      upsert["on_conflict"] == schema_unique("dispatch_acks"),
+      f'코드 {upsert["on_conflict"]} / 스키마 {schema_unique("dispatch_acks")}')
 unknown = set(upsert["row"]) - schema_columns("dispatch_acks")
 check("보내는 컬럼이 전부 스키마에 존재", not unknown, unknown or "전부 일치")
 check("반환 레코드 매핑", record.vehicle_label == "스타렉스 12가3456" and record.driver_name == "홍길동")

@@ -33,24 +33,31 @@ def save_dispatch(result: OptimizeResponse, service_date: date) -> None:
     now = datetime.now(KST).replace(microsecond=0).isoformat()
     row = {
         "service_date": service_date.isoformat(),
+        "trip_type": result.trip_type,
         "payload": result.model_dump(mode="json"),
         "updated_at": now,
     }
     try:
-        get_supabase().table(TABLE).upsert(row, on_conflict="service_date").execute()
+        # trip_type 이 키에 없으면 하원 배차가 등원 배차를 덮어쓴다.
+        get_supabase().table(TABLE).upsert(
+            row, on_conflict="service_date,trip_type"
+        ).execute()
     except APIError as error:
         raise HTTPException(
             status_code=502, detail=f"배차 결과 저장에 실패했습니다: {error.message}"
         ) from error
 
 
-def load_dispatch(service_date: date) -> OptimizeResponse | None:
+def load_dispatch(
+    service_date: date, trip_type: str = "inbound"
+) -> OptimizeResponse | None:
     try:
         result = (
             get_supabase()
             .table(TABLE)
             .select("payload")
             .eq("service_date", service_date.isoformat())
+            .eq("trip_type", trip_type)
             .limit(1)
             .execute()
         )
@@ -171,6 +178,7 @@ def acknowledge_dispatch(
     now = datetime.now(KST).replace(microsecond=0)
     row = {
         "service_date": service_date.isoformat(),
+        "trip_type": payload.trip_type,
         "vehicle_id": payload.vehicle_id,
         "vehicle_label": payload.vehicle_label,
         "driver_name": payload.driver_name,
@@ -181,7 +189,7 @@ def acknowledge_dispatch(
         result = (
             get_supabase()
             .table(ACK_TABLE)
-            .upsert(row, on_conflict="service_date,vehicle_id")
+            .upsert(row, on_conflict="service_date,vehicle_id,trip_type")
             .execute()
         )
     except APIError as error:
@@ -193,13 +201,16 @@ def acknowledge_dispatch(
     return _to_ack(result.data[0])
 
 
-def list_acknowledgements(service_date: date) -> list[DispatchAckRecord]:
+def list_acknowledgements(
+    service_date: date, trip_type: str = "inbound"
+) -> list[DispatchAckRecord]:
     try:
         result = (
             get_supabase()
             .table(ACK_TABLE)
             .select("*")
             .eq("service_date", service_date.isoformat())
+            .eq("trip_type", trip_type)
             .order("acknowledged_at", desc=False)
             .execute()
         )
@@ -213,6 +224,7 @@ def list_acknowledgements(service_date: date) -> list[DispatchAckRecord]:
 def _to_ack(row: dict) -> DispatchAckRecord:
     return DispatchAckRecord(
         service_date=str(row["service_date"]),
+        trip_type=row.get("trip_type") or "inbound",
         vehicle_id=row["vehicle_id"],
         vehicle_label=row["vehicle_label"],
         driver_name=row.get("driver_name"),
