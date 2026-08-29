@@ -90,6 +90,10 @@ function formatClock(value) {
   });
 }
 
+// 화면 아래 고정된 계산 버튼의 크기. 스크롤 끝을 얼마나 비울지 계산하는 데 쓴다.
+const FAB_HEIGHT = 58;
+const FAB_GAP = 16;
+
 const STORAGE_KEY = 'daycare-routing:last-session:v1';
 // 기사님 폰은 한 번 고르면 계속 기사 화면으로 열려야 한다.
 const MODE_KEY = 'daycare-routing:mode:v1';
@@ -110,6 +114,11 @@ export default function App() {
 function AdminApp() {
   const insets = useSafeAreaInsets();
   const fontsLoaded = useAppFonts();
+  // 화면 아래 떠 있는 계산 버튼이 가리는 높이.
+  // onLayout 으로 재보려 했으나 웹에서 0 이 돌아와 스페이서가 비어버렸다.
+  // 버튼 높이가 styles.fab 에 고정되어 있으므로 그냥 더한다. 잴 필요가 없다.
+  //   버튼(58) + 버튼 아래 여백(기기 제스처바 + 16) + 콘텐츠와의 간격(16)
+  const ctaClearance = FAB_HEIGHT + insets.bottom + FAB_GAP + 16;
   const [screen, setScreen] = useState('vehicles');
   const [vehicles, setVehicles] = useState([emptyVehicle()]);
   const [center, setCenter] = useState({
@@ -662,7 +671,7 @@ function AdminApp() {
               />
               <Text style={styles.hint}>주소 좌표가 없으면 백엔드의 카카오 REST API 키로 자동 변환합니다.</Text>
               {/* 계산 버튼이 화면 아래에 떠 있어 그 밑이 가린다. 그만큼 자리를 비운다. */}
-              <View style={styles.fabSpacer} />
+              <View style={{ height: ctaClearance }} />
             </>
           ) : (
             <>
@@ -730,7 +739,10 @@ function AdminApp() {
             스크롤 위에 띄워 어디서든 바로 누를 수 있게 한다.
             대상자 탭에서만 보인다. 관제 화면에는 이미 자기 버튼들이 있다. */}
         {screen === 'input' && (
-          <View style={styles.fabWrap} pointerEvents="box-none">
+          <View
+            style={[styles.fabWrap, { paddingBottom: insets.bottom + FAB_GAP }]}
+            pointerEvents="box-none"
+          >
             <Pressable
               style={[styles.fab, loading && styles.disabledButton]}
               onPress={submit}
@@ -789,12 +801,9 @@ const styles = StyleSheet.create({
   fabWrap: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
     paddingHorizontal: 18, alignItems: 'center',
-    paddingBottom: Platform.select({ android: 96, ios: 34, default: 24 }),
   },
-  fab: { flexDirection: 'row', gap: 8, width: '100%', maxWidth: 520, backgroundColor: '#0BA38E', borderRadius: 999, height: 58, alignItems: 'center', justifyContent: 'center', shadowColor: '#0D2540', shadowOpacity: 0.28, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 8 },
+  fab: { flexDirection: 'row', gap: 8, width: '100%', maxWidth: 520, backgroundColor: '#0BA38E', borderRadius: 999, height: FAB_HEIGHT, alignItems: 'center', justifyContent: 'center', shadowColor: '#0D2540', shadowOpacity: 0.28, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 8 },
   fabText: { color: '#FFFFFF', fontSize: 17, fontWeight: '900' },
-  // 버튼이 가리는 만큼 스크롤 끝에 자리를 비운다. 안 그러면 마지막 항목이 가린다.
-  fabSpacer: { height: Platform.select({ android: 168, ios: 106, default: 96 }) },
   optimizeButton: { backgroundColor: '#0BA38E', borderRadius: 15, height: 56, alignItems: 'center', justifyContent: 'center', shadowColor: '#0BA38E', shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 4 },
   nextButton: { flexDirection: 'row', gap: 6, backgroundColor: '#07705F', borderRadius: 15, height: 54, alignItems: 'center', justifyContent: 'center' },
   optimizeButtonText: { color: '#FFFFFF', fontSize: 17, fontWeight: '900' },

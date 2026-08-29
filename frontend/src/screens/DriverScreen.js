@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Text from '../ui/Text';
 import Icon from '../ui/Icon';
 import { color } from '../theme';
-import { ActivityIndicator, Alert, BackHandler, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, Image, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import {
   acknowledgeDispatch,
@@ -178,8 +178,14 @@ export default function DriverScreen({ onExit, bottomInset = 0 }) {
   if (phase === 'loading') {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#0BA38E" />
-        <Text style={styles.centerTitle}>오늘 배차를 불러오는 중입니다…</Text>
+        {/* 심볼 → 진행 표시 → 제목 → 설명 순으로 간격을 벌려 눈이 차례로 읽게 한다. */}
+        <Image
+          source={require('../../assets/mroute-mark.png')}
+          style={styles.loadingMark}
+          resizeMode="contain"
+        />
+        <ActivityIndicator size="large" color={color.teal} style={styles.loadingSpinner} />
+        <Text style={styles.centerTitle}>오늘 배차를 불러오는 중입니다</Text>
         <Text style={styles.centerHint}>
           절전 상태였던 서버를 깨우는 중일 수 있습니다.{'\n'}
           처음 열 때는 1분 이상 걸릴 수 있습니다. 앱을 끄지 말고 기다려 주세요.
@@ -243,14 +249,17 @@ export default function DriverScreen({ onExit, bottomInset = 0 }) {
                   {item.driver_name ? `${item.driver_name} 선생님 · ` : ''}총 {total}명
                 </Text>
                 {item.start_type === 'custom' ? (
-                  <View style={styles.startRow}>
+                  <View style={styles.startBlock}>
                     <View style={styles.selfBadge}>
                       <Text style={styles.selfBadgeText}>자차 송영</Text>
                     </View>
-                    <Icon name="home" size={14} tint={color.textSecondary} />
-                    <Text style={styles.vehiclePickStart} numberOfLines={2}>
-                      {item.start_address}
-                    </Text>
+                    {/* 출발지는 기사님에게 중요한 운행 정보다. 줄을 통째로 내준다. */}
+                    <View style={styles.startRow}>
+                      <Icon name="home" size={14} tint={color.textSecondary} />
+                      <Text style={styles.vehiclePickStart} numberOfLines={2}>
+                        {item.start_address}
+                      </Text>
+                    </View>
                   </View>
                 ) : (
                   // 센터 출발이면 긴 주소 대신 등록된 센터명을 보여준다.
@@ -415,11 +424,14 @@ export default function DriverScreen({ onExit, bottomInset = 0 }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#F2F4F7' },
-  center: { flex: 1, backgroundColor: '#F2F4F7', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 14 },
-  centerTitle: { color: '#0D2540', fontSize: 17, fontWeight: '800', textAlign: 'center' },
-  centerHint: { color: '#667085', fontSize: 13.5, textAlign: 'center', lineHeight: 21 },
-  elapsed: { color: '#0BA38E', fontSize: 15, fontWeight: '900' },
-  errorText: { color: '#9B2C2C', fontSize: 15, fontWeight: '700', textAlign: 'center', lineHeight: 22 },
+  // gap 을 쓰지 않고 항목마다 간격을 따로 준다. 심볼과 글자는 붙는 정도가 달라야 한다.
+  center: { flex: 1, backgroundColor: '#F2F4F7', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
+  loadingMark: { width: 72, height: 72 },
+  loadingSpinner: { marginTop: 24 },
+  centerTitle: { color: '#0D2540', fontSize: 17, fontWeight: '700', textAlign: 'center', marginTop: 20 },
+  centerHint: { color: '#667085', fontSize: 13.5, textAlign: 'center', lineHeight: 21, marginTop: 10 },
+  elapsed: { color: '#07705F', fontSize: 14, fontWeight: '700', marginTop: 18 },
+  errorText: { color: '#9B2C2C', fontSize: 15, fontWeight: '600', textAlign: 'center', lineHeight: 22, marginBottom: 20 },
 
   topBar: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingTop: 14, paddingBottom: 14, backgroundColor: '#0D2540' },
   topActionButton: { backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
@@ -433,10 +445,11 @@ const styles = StyleSheet.create({
   vehiclePickName: { color: '#0D2540', fontSize: 24, fontWeight: '900' },
   vehiclePickPlate: { color: '#0BA38E', fontSize: 17, fontWeight: '800', marginTop: 2 },
   vehiclePickMeta: { color: '#667085', fontSize: 14, marginTop: 8 },
-  vehiclePickStart: { color: '#8A6100', fontSize: 13, fontWeight: '700', lineHeight: 19, flexShrink: 1 },
-  vehiclePickCenter: { color: '#0BA38E', fontSize: 13, fontWeight: '700', marginTop: 6 },
+  vehiclePickStart: { flex: 1, minWidth: 0, color: '#8A6100', fontSize: 13.5, fontWeight: '600', lineHeight: 20 },
+  vehiclePickCenter: { flex: 1, minWidth: 0, color: '#07705F', fontSize: 13.5, fontWeight: '600', lineHeight: 20 },
   stopNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  startRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 6 },
+  startBlock: { alignItems: 'flex-start', gap: 6, marginTop: 8 },
+  startRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 6, alignSelf: 'stretch' },
   selfBadge: { backgroundColor: '#FEF6E7', borderWidth: 1, borderColor: '#F2B84B', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   selfBadgeText: { color: '#8A6100', fontSize: 11, fontWeight: '900' },
   ackBar: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#FFFFFF', borderRadius: 14, borderWidth: 1, borderColor: '#E4E7EC', padding: 14, marginBottom: 12 },
@@ -476,8 +489,8 @@ const styles = StyleSheet.create({
   emptyTitle: { color: '#0D2540', fontSize: 16, fontWeight: '700', textAlign: 'center' },
   emptyBody: { color: '#667085', fontSize: 13.5, textAlign: 'center', lineHeight: 20 },
 
-  bigButton: { backgroundColor: '#0BA38E', borderRadius: 15, paddingHorizontal: 28, paddingVertical: 15 },
+  bigButton: { backgroundColor: '#0D2540', borderRadius: 12, paddingHorizontal: 28, paddingVertical: 15 },
   bigButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' },
-  linkButton: { paddingVertical: 12 },
+  linkButton: { paddingVertical: 12, marginTop: 6 },
   linkText: { color: '#667085', fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },
 });
