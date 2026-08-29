@@ -1,29 +1,66 @@
 -- ============================================================
 -- vehicles 표 재생성
 --
--- Supabase 대시보드 > SQL Editor 에 통째로 붙여넣고 실행하세요.
+-- ⚠️ 한 번에 다 실행하지 마세요. [1단계] 를 먼저 돌려 결과를 확인한 뒤
+--    [2단계] 를 실행하세요. 이유는 아래에 적었습니다.
 --
 -- 왜 다시 만드는가
 --   지금 DB 의 vehicles 표는 supabase_schema.sql 의 정의와 모양이 아예 다릅니다.
---   vehicle_id, plate_number, vehicle_type, driver_name, start_type 이 없고
---   name 같은 엉뚱한 칸이 들어 있습니다. 언제 만들어진 것인지 알 수 없습니다.
---
+--   vehicle_id, plate_number, vehicle_type, driver_name, start_type 이 없습니다.
 --   그래서 배차를 계산할 때마다 돌던 차량 백업이 계속 실패하고 있었습니다.
 --   (실패해도 배차가 멈추지 않게 감싸 둬서 로그에만 남았습니다.)
 --
--- 안전한가
---   실행 직전에 확인했을 때 이 표는 0행입니다. 지울 데이터가 없습니다.
---   차량 명단의 원본은 원장님 앱에 있고, 이 표는 백업일 뿐입니다.
---   다음 배차 계산 때 앱이 보내는 차량으로 자동으로 다시 채워집니다.
---
---   이 표를 읽는 코드는 없습니다. 쓰기만 합니다. (main.py 의 _archive_vehicles)
+-- 왜 CASCADE 를 쓰지 않는가
+--   처음 시도에서 routes 라는 표가 vehicles 를 참조한다며 막혔습니다.
+--   CASCADE 를 붙이면 뚫리기는 하지만, 제가 모르는 다른 것까지 함께 지워집니다.
+--   무엇이 딸려 있는지 눈으로 보고 하나씩 지우는 편이 안전합니다.
 -- ============================================================
 
--- 혹시 모르니 먼저 눈으로 확인하세요. 0 이 나와야 합니다.
-select count(*) as "지워질 행수" from public.vehicles;
+
+-- ════════════════════════════════════════════════════════════
+-- [1단계] 확인 — 이것부터 실행하고 결과를 보세요.
+-- ════════════════════════════════════════════════════════════
+
+-- (1) 이 프로젝트에 어떤 표들이 있는지. 우리가 쓰는 것은 7개입니다.
+--     ride_completions, driver_devices, dispatches, dispatch_acks,
+--     vehicles, passengers, driver_dispatch_sms
+--     그 외에 나오는 이름은 예전에 만들어져 잊힌 것들입니다.
+select
+  table_name as "표 이름",
+  (select count(*) from information_schema.columns c
+    where c.table_schema = 'public' and c.table_name = t.table_name) as "칸 수"
+from information_schema.tables t
+where table_schema = 'public' and table_type = 'BASE TABLE'
+order by table_name;
+
+-- (2) vehicles 에 딸려 있는 것이 routes 말고 또 있는지.
+select
+  con.conname   as "제약 이름",
+  src.relname   as "딸려 있는 표"
+from pg_constraint con
+join pg_class src on src.oid = con.conrelid
+where con.confrelid = 'public.vehicles'::regclass;
+
+-- (3) 지워질 데이터가 정말 없는지. 둘 다 0 이어야 합니다.
+select 'vehicles' as "표", count(*) as "행수" from public.vehicles
+union all
+select 'routes', count(*) from public.routes;
 
 
--- ── 재생성 ────────────────────────────────────────────────────
+-- ════════════════════════════════════════════════════════════
+-- [2단계] 재생성 — 위 (2)에 routes 하나만 나오고 (3)이 둘 다 0 이면
+--         아래를 실행하세요.
+--
+--         만약 (2)에 routes 말고 다른 표가 더 나왔다면 멈추고 알려주세요.
+--         그 표가 무엇인지 보고 다시 판단해야 합니다.
+-- ════════════════════════════════════════════════════════════
+
+-- routes 는 우리 코드가 쓰지 않고 스키마 파일에도 없는 옛 흔적입니다.
+-- 0행이므로 지웁니다. 남겨두고 제약만 푸는 것보다 깨끗합니다.
+drop table if exists public.routes;
+
+-- CASCADE 를 붙이지 않습니다. 아직 모르는 의존이 남아 있다면
+-- 조용히 지워지는 대신 여기서 다시 막혀야 합니다.
 drop table if exists public.vehicles;
 
 create table public.vehicles (
@@ -53,7 +90,7 @@ create table public.vehicles (
 alter table public.vehicles enable row level security;
 
 
--- ── 확인 ─────────────────────────────────────────────────────
+-- ── 결과 확인 ────────────────────────────────────────────────
 select '칸 목록' as 항목,
        string_agg(column_name, ', ' order by ordinal_position) as 값
   from information_schema.columns
