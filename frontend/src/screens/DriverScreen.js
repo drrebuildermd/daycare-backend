@@ -33,7 +33,7 @@ function formatAckTime(value) {
  * 현장에서 운전 중에 쓰는 화면이다. 탭도 설정도 없다.
  * 차량을 한 번 고르면 그 뒤로는 명단 / 내비 / 전화 / 완료 네 가지만 보인다.
  */
-export default function DriverScreen({ onExit }) {
+export default function DriverScreen({ onExit, bottomInset = 0 }) {
   const [dispatch, setDispatch] = useState(null);
   const [ackList, setAckList] = useState([]);
   const [vehicleId, setVehicleId] = useState(null);
@@ -211,11 +211,11 @@ export default function DriverScreen({ onExit }) {
         <View style={styles.topBar}>
           {/* 제목이 남는 공간을 다 먹어야 버튼이 오른쪽 끝으로 밀린다. */}
           <Text style={[styles.topTitle, { flex: 1 }]}>기사님 화면</Text>
-          <Pressable onPress={onExit} hitSlop={12} style={styles.topActionButton}>
+          <Pressable onPress={onExit} hitSlop={12} style={[styles.topActionButton, { flexShrink: 0 }]}>
             <Text style={styles.topAction}>모드 변경</Text>
           </Pressable>
         </View>
-        <ScrollView contentContainerStyle={styles.pickBody}>
+        <ScrollView contentContainerStyle={[styles.pickBody, { paddingBottom: 18 + bottomInset }]}>
           <Text style={styles.pickHeading}>운행하실 차량을 선택하세요</Text>
           {vehicles.length === 0 ? (
             <View style={styles.emptyCard}>
@@ -291,7 +291,7 @@ export default function DriverScreen({ onExit }) {
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.listBody}>
+      <ScrollView contentContainerStyle={[styles.listBody, { paddingBottom: 40 + bottomInset }]}>
         <View style={[styles.ackBar, ackedAt && styles.ackBarDone]}>
           {!!ackedAt && <Icon name="done" size={16} tint="#237B4B" />}
           <Text style={[styles.ackText, ackedAt && styles.ackTextDone]}>
@@ -421,14 +421,14 @@ const styles = StyleSheet.create({
   elapsed: { color: '#0BA38E', fontSize: 15, fontWeight: '900' },
   errorText: { color: '#9B2C2C', fontSize: 15, fontWeight: '700', textAlign: 'center', lineHeight: 22 },
 
-  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingHorizontal: 18, paddingTop: 16, paddingBottom: 14, backgroundColor: '#0BA38E' },
+  topBar: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 18, paddingTop: 14, paddingBottom: 14, backgroundColor: '#0D2540' },
   topActionButton: { backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
-  topTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: '900' },
+  topTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700' },
   topSub: { color: '#6ED6C1', fontSize: 13, fontWeight: '700', marginTop: 3 },
-  topAction: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  topAction: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
 
   pickBody: { padding: 18, gap: 12 },
-  pickHeading: { color: '#0D2540', fontSize: 18, fontWeight: '900', marginBottom: 4 },
+  pickHeading: { color: '#0D2540', fontSize: 18, fontWeight: '700', marginBottom: 4 },
   vehiclePick: { backgroundColor: '#FFFFFF', borderRadius: 18, borderWidth: 2, borderColor: '#0BA38E', padding: 22 },
   vehiclePickName: { color: '#0D2540', fontSize: 24, fontWeight: '900' },
   vehiclePickPlate: { color: '#0BA38E', fontSize: 17, fontWeight: '800', marginTop: 2 },
@@ -473,7 +473,7 @@ const styles = StyleSheet.create({
   actionLabelOnDark: { color: '#FFFFFF' },
 
   emptyCard: { backgroundColor: '#FFFFFF', borderRadius: 18, borderWidth: 1, borderColor: '#E4E7EC', padding: 24, alignItems: 'center', gap: 12 },
-  emptyTitle: { color: '#0D2540', fontSize: 16, fontWeight: '800', textAlign: 'center' },
+  emptyTitle: { color: '#0D2540', fontSize: 16, fontWeight: '700', textAlign: 'center' },
   emptyBody: { color: '#667085', fontSize: 13.5, textAlign: 'center', lineHeight: 20 },
 
   bigButton: { backgroundColor: '#0BA38E', borderRadius: 15, paddingHorizontal: 28, paddingVertical: 15 },

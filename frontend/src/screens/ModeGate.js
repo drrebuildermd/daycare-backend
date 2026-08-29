@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
+import TextInput from '../ui/TextInput';
 import Text from '../ui/Text';
-import { Image, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 import Icon from '../ui/Icon';
 import { brand, color } from '../theme';
@@ -79,20 +80,23 @@ export default function ModeGate({ onSelect }) {
       </View>
       <Text style={styles.sub}>{brand.tagline}</Text>
 
-      <Pressable style={[styles.choice, styles.choiceDriver]} onPress={() => onSelect('driver')}>
-        <Icon name="vehicle" size={30} tint={color.green} />
-        <Text style={styles.choiceTitle}>기사님 · 운행</Text>
-        <Text style={styles.choiceDesc}>오늘 내 차량의 동선과 탑승 명단을 봅니다</Text>
+      {/* 이 제품을 사고 매일 쓰는 사람은 관리자다. 먼저 오고 더 눈에 띄어야 한다. */}
+      <Pressable style={[styles.choice, styles.choiceAdmin]} onPress={() => setAsking(true)}>
+        <Icon name="admin" size={30} tint={color.white} />
+        <Text style={[styles.choiceTitle, styles.choiceTitleOnDark]}>관리자 · 배차</Text>
+        <Text style={[styles.choiceDesc, styles.choiceDescOnDark]}>
+          배차 계산과 경로·차량 운영, 전체 관제
+        </Text>
+        <View style={styles.lockRow}>
+          <Icon name="locked" size={13} tint="#98A2B3" />
+          <Text style={[styles.lockHint, styles.lockHintOnDark]}>PIN 필요</Text>
+        </View>
       </Pressable>
 
-      <Pressable style={[styles.choice, styles.choiceAdmin]} onPress={() => setAsking(true)}>
-        <Icon name="admin" size={30} tint={color.deepNavy} />
-        <Text style={styles.choiceTitle}>관리자 · 배차</Text>
-        <Text style={styles.choiceDesc}>배차 계산과 경로·차량 운영, 전체 관제</Text>
-        <View style={styles.lockRow}>
-          <Icon name="locked" size={13} tint={color.textSecondary} />
-          <Text style={styles.lockHint}>PIN 필요</Text>
-        </View>
+      <Pressable style={[styles.choice, styles.choiceDriver]} onPress={() => onSelect('driver')}>
+        <Icon name="vehicle" size={30} tint={color.teal} />
+        <Text style={styles.choiceTitle}>기사님 · 운행</Text>
+        <Text style={styles.choiceDesc}>오늘 내 차량의 동선과 탑승 명단을 봅니다</Text>
       </Pressable>
 
       <Text style={styles.footnote}>
@@ -113,12 +117,15 @@ const styles = StyleSheet.create({
   sub: { color: '#667085', fontSize: 14, marginTop: 14, marginBottom: 26 },
 
   choice: { borderRadius: 16, padding: 20, marginBottom: 12, borderWidth: 1.5 },
-  choiceDriver: { backgroundColor: '#E9F7EF', borderColor: '#3BB273' },
-  choiceAdmin: { backgroundColor: '#FFFFFF', borderColor: '#E4E7EC' },
+  choiceAdmin: { backgroundColor: '#0D2540', borderColor: '#0D2540' },
+  choiceDriver: { backgroundColor: '#FFFFFF', borderColor: '#E4E7EC' },
   choiceTitle: { color: '#0D2540', fontSize: 20, fontWeight: '700', marginTop: 10 },
+  choiceTitleOnDark: { color: '#FFFFFF' },
   choiceDesc: { color: '#667085', fontSize: 13, marginTop: 4, lineHeight: 19 },
+  choiceDescOnDark: { color: '#C7D0DA' },
   lockRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10 },
   lockHint: { color: '#667085', fontSize: 12, fontWeight: '600' },
+  lockHintOnDark: { color: '#98A2B3' },
 
   pinInput: { backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: '#E4E7EC', borderRadius: 14, height: 60, fontSize: 26, letterSpacing: 10, textAlign: 'center', color: '#0D2540', marginBottom: 12 },
   error: { color: '#D64545', fontSize: 13, fontWeight: '700', marginBottom: 10, textAlign: 'center' },

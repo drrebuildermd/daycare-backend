@@ -1,24 +1,25 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import TextInput from './src/ui/TextInput';
 import Text from './src/ui/Text';
 import { brand, color } from './src/theme';
 import Icon from './src/ui/Icon';
+import useAppFonts from './src/ui/loadFonts';
 import {
   ActivityIndicator,
   Alert,
   AppState,
   BackHandler,
+  Image,
   KeyboardAvoidingView,
   Linking,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -96,13 +97,19 @@ const MODE_KEY = 'daycare-routing:mode:v1';
 // 준비가 끝날 때까지 스플래시를 내리지 않는다.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
+// 안드로이드는 화면 위아래 끝까지 앱이 그려진다(edge-to-edge).
+// 상태바·제스처바가 차지하는 만큼을 직접 비워주지 않으면 글자가 그 밑에 깔린다.
 export default function App() {
-  const [fontsLoaded] = useFonts({
-    'Pretendard-Regular': require('./assets/fonts/Pretendard-Regular.ttf'),
-    'Pretendard-Medium': require('./assets/fonts/Pretendard-Medium.ttf'),
-    'Pretendard-SemiBold': require('./assets/fonts/Pretendard-SemiBold.ttf'),
-    'Pretendard-Bold': require('./assets/fonts/Pretendard-Bold.ttf'),
-  });
+  return (
+    <SafeAreaProvider>
+      <AdminApp />
+    </SafeAreaProvider>
+  );
+}
+
+function AdminApp() {
+  const insets = useSafeAreaInsets();
+  const fontsLoaded = useAppFonts();
   const [screen, setScreen] = useState('vehicles');
   const [vehicles, setVehicles] = useState([emptyVehicle()]);
   const [center, setCenter] = useState({
@@ -516,34 +523,37 @@ export default function App() {
 
   if (mode === 'gate') {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <View style={[styles.safeArea, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <StatusBar barStyle="dark-content" backgroundColor="#F2F4F7" />
         <ModeGate onSelect={chooseMode} />
-      </SafeAreaView>
+      </View>
     );
   }
 
   if (mode === 'driver') {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="light-content" backgroundColor="#0BA38E" />
-        <DriverScreen onExit={leaveMode} />
-      </SafeAreaView>
+      <View style={[styles.safeArea, { paddingTop: insets.top }]}>
+        <StatusBar barStyle="light-content" backgroundColor="#0D2540" />
+        <DriverScreen onExit={leaveMode} bottomInset={insets.bottom} />
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={[styles.safeArea, { paddingTop: insets.top }]}>
       <StatusBar barStyle="dark-content" backgroundColor="#F2F4F7" />
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.topBar}>
-          <View>
-            <Text style={styles.eyebrow}>{brand.descriptor}</Text>
-            <Text style={styles.appTitle}>{brand.productName}</Text>
-          </View>
-          <Pressable style={styles.statusPill} onPress={leaveMode}>
+          <Image
+            source={require('./assets/mroute-mark.png')}
+            style={styles.topMark}
+            resizeMode="contain"
+          />
+          {/* 제목이 남는 자리를 다 먹어야 오른쪽 버튼이 화면 밖으로 밀리지 않는다. */}
+          <Text style={styles.appTitle} numberOfLines={1}>{brand.productName}</Text>
+          <Pressable style={styles.statusPill} onPress={leaveMode} hitSlop={8}>
             <View style={styles.statusDot} />
-            <Text style={styles.statusText}>관리자 모드 · 탭하여 변경</Text>
+            <Text style={styles.statusText} numberOfLines={1}>관리자</Text>
           </Pressable>
         </View>
 
@@ -699,8 +709,8 @@ export default function App() {
                     )}
                 </Pressable>
                 <Pressable style={styles.exportButton} onPress={downloadTodayLog}>
-                  <Icon name="report" size={15} tint="#FFFFFF" />
-                  <Text style={styles.exportButtonText}>송영 일지</Text>
+                  <Icon name="report" size={15} tint={color.deepNavy} />
+                  <Text style={styles.secondaryButtonText}>송영 일지</Text>
                 </Pressable>
               </View>
               <VehicleResults
@@ -738,7 +748,7 @@ export default function App() {
           </View>
         )}
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -746,12 +756,13 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: '#F2F4F7' },
   bootScreen: { flex: 1, backgroundColor: color.deepNavy },
-  topBar: { paddingHorizontal: 18, paddingTop: 14, paddingBottom: 11, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  eyebrow: { color: '#0BA38E', fontSize: 10, fontWeight: '900', letterSpacing: 1.4 },
-  appTitle: { color: '#0D2540', fontSize: 24, fontWeight: '900', marginTop: 1 },
-  statusPill: { maxWidth: 160, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 9, paddingVertical: 6, borderRadius: 20, backgroundColor: '#FFFFFF' },
+  topBar: { paddingHorizontal: 18, paddingTop: 10, paddingBottom: 10, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  topMark: { width: 26, height: 26 },
+  appTitle: { flex: 1, minWidth: 0, color: '#0D2540', fontSize: 17, fontWeight: '700' },
+  // flexShrink: 0 이 없으면 제목이 길 때 이 버튼이 화면 밖으로 밀려 잘린다.
+  statusPill: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 999, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E4E7EC' },
   statusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#3BB273', marginRight: 5 },
-  statusText: { color: '#667085', fontSize: 9, flexShrink: 1 },
+  statusText: { color: '#667085', fontSize: 12, fontWeight: '600' },
   tabs: { marginHorizontal: 18, backgroundColor: '#E4E7EC', borderRadius: 13, padding: 4, flexDirection: 'row' },
   tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
   activeTab: { backgroundColor: '#FFFFFF' },
@@ -795,12 +806,14 @@ const styles = StyleSheet.create({
   capacityLabel: { color: '#237B4B', fontWeight: '800' },
   capacityValue: { color: '#237B4B', fontSize: 16, fontWeight: '900' },
   actionRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
-  exportButton: { flex: 1, backgroundColor: '#0BA38E', borderRadius: 13, paddingVertical: 13, alignItems: 'center' },
-  dispatchButton: { flex: 1, backgroundColor: '#0BA38E', borderRadius: 13, paddingVertical: 13, alignItems: 'center', justifyContent: 'center' },
+  // 보조 동작이다. 채우지 않고 테두리만 둬서 주 동작과 구별되게 한다.
+  exportButton: { flex: 1, flexDirection: 'row', gap: 6, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E4E7EC', borderRadius: 12, paddingVertical: 13, alignItems: 'center', justifyContent: 'center' },
+  dispatchButton: { flex: 1, flexDirection: 'row', gap: 6, backgroundColor: '#0D2540', borderRadius: 12, paddingVertical: 13, alignItems: 'center', justifyContent: 'center' },
   driverPanelSpacing: { marginTop: 18 },
   syncBar: { alignSelf: 'flex-start', backgroundColor: '#E6F7F4', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7, marginBottom: 12 },
   syncText: { color: '#07705F', fontSize: 12, fontWeight: '700' },
   focusBanner: { backgroundColor: '#E9F7EF', borderWidth: 1, borderColor: '#6ED6C1', borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginBottom: 12 },
   focusBannerText: { color: '#237B4B', fontWeight: '800', fontSize: 12.5 },
-  exportButtonText: { color: '#FFFFFF', fontWeight: '900', fontSize: 14 },
+  exportButtonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
+  secondaryButtonText: { color: '#0D2540', fontWeight: '700', fontSize: 14 },
 });

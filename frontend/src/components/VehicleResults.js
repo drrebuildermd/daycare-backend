@@ -198,15 +198,16 @@ export default function VehicleResults({
 }
 
 const styles = StyleSheet.create({
-  summary: { backgroundColor: '#0BA38E', borderRadius: 20, padding: 20, marginBottom: 16 },
+  summary: { backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E4E7EC',
+    borderLeftWidth: 4, borderLeftColor: '#0BA38E', padding: 18, marginBottom: 16 },
   // flexWrap이 분할/적층을 자동으로 결정한다. 폭이 flexBasis 합보다 좁으면 줄바꿈된다.
   splitRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: 16 },
   // 지도는 스크롤에 따라붙어 리스트를 훑는 동안에도 계속 보이게 한다.
   mapPane: { flexGrow: 1.15, flexShrink: 1, flexBasis: 520, minWidth: 300, position: 'sticky', top: 16 },
   listPane: { flexGrow: 1, flexShrink: 1, flexBasis: 440, minWidth: 300 },
-  summaryEyebrow: { color: '#6ED6C1', fontWeight: '800', fontSize: 12, marginBottom: 5 },
-  summaryTitle: { color: '#FFFFFF', fontWeight: '900', fontSize: 22 },
-  summaryCaption: { color: '#E9F7EF', marginTop: 6 },
+  summaryEyebrow: { color: '#07705F', fontWeight: '700', fontSize: 12, marginBottom: 5 },
+  summaryTitle: { color: '#0D2540', fontWeight: '700', fontSize: 22 },
+  summaryCaption: { color: '#667085', fontSize: 13, marginTop: 6 },
   vehicleCapacity: { color: '#667085', marginTop: 3, fontSize: 12 },
   originAddress: { color: '#8A6100', fontSize: 12, fontWeight: '700', marginTop: 4, lineHeight: 18 },
   trip: { borderTopWidth: 1, borderColor: '#E4E7EC', padding: 15 },

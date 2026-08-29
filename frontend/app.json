@@ -2,7 +2,7 @@
   "expo": {
     "name": "마중ON",
     "slug": "daycare-routing-mobile",
-    "version": "1.5.0",
+    "version": "1.5.1",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
@@ -17,7 +17,7 @@
     "android": {
       "package": "com.daycare.routing",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 11,
+      "versionCode": 12,
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -33,6 +33,17 @@
           "backgroundColor": "#0D2540",
           "imageWidth": 220,
           "resizeMode": "contain"
+        }
+      ],
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/Pretendard-Regular.ttf",
+            "./assets/fonts/Pretendard-Medium.ttf",
+            "./assets/fonts/Pretendard-SemiBold.ttf",
+            "./assets/fonts/Pretendard-Bold.ttf"
+          ]
         }
       ]
     ],

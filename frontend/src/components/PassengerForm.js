@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
+import TextInput from '../ui/TextInput';
 import Text from '../ui/Text';
 import Icon from '../ui/Icon';
 import { color } from '../theme';
-import { Pressable, StyleSheet, Switch, TextInput, View, TouchableOpacity } from 'react-native';
+import { Pressable, StyleSheet, Switch, View, TouchableOpacity } from 'react-native';
 
 import AddressSearch from './AddressSearch';
 import Accordion from './Accordion';
