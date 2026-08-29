@@ -114,7 +114,7 @@ export async function enablePushForDriver(driverName) {
     }
     if (status !== 'granted') {
       throw new PushSetupError(
-        '알림 권한이 거부되었습니다. 설정 > 앱 > 송영 최적화 > 알림에서 켜 주세요.',
+        '알림 권한이 거부되었습니다. 설정 > 앱 > 마중ON > 알림에서 켜 주세요.',
       );
     }
 
