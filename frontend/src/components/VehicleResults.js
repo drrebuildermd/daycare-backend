@@ -1,5 +1,7 @@
 import React, { useMemo } from 'react';
 import Text from '../ui/Text';
+import Icon from '../ui/Icon';
+import { color } from '../theme';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import Accordion from './Accordion';
@@ -45,15 +47,15 @@ const Trip = ({ trip, vehicle, center, completedStops, savingStops, onComplete }
         <View style={styles.stopBody}>
           <View style={styles.nameRow}>
             <Text style={[styles.stopName, completedAt && styles.completedText]}>{stop.name}</Text>
-            {stop.wheelchair && <Text style={styles.wheelchair}>♿ 휠체어</Text>}
+            {stop.wheelchair && <Icon name="wheelchair" size={15} tint={color.textSecondary} />}
             <Text style={[styles.eta, completedAt && styles.completedText]}>{stop.estimated_pickup}</Text>
           </View>
           <Text style={[styles.address, completedAt && styles.completedText]}>{stop.address}</Text>
           {!!stop.detail_address && (
-            <Text style={[styles.detailAddress, completedAt && styles.completedText]}>🏠 {stop.detail_address}</Text>
+            <Text style={[styles.detailAddress, completedAt && styles.completedText]}>{stop.detail_address}</Text>
           )}
           <Text style={styles.window}>요청 {stop.requested_window}</Text>
-          {completedAt && <Text style={styles.completedAt}>✅ 탑승 완료 · {formatCompletionTime(completedAt)}</Text>}
+          {completedAt && <Text style={styles.completedAt}>탑승 완료 · {formatCompletionTime(completedAt)}</Text>}
         </View>
         <View style={styles.actionColumn}>
           <Pressable
@@ -63,7 +65,8 @@ const Trip = ({ trip, vehicle, center, completedStops, savingStops, onComplete }
             )}
             disabled={Boolean(completedAt)}
           >
-            <Text style={styles.singleNaviText}>🚀 내비</Text>
+            <Icon name="navigate" size={14} tint="#FFFFFF" />
+            <Text style={styles.singleNaviText}>내비</Text>
           </Pressable>
           <Pressable
             style={[styles.completeButton, (completedAt || isSaving) && styles.completedButton]}
@@ -71,7 +74,7 @@ const Trip = ({ trip, vehicle, center, completedStops, savingStops, onComplete }
             disabled={Boolean(completedAt) || isSaving}
           >
             <Text style={[styles.completeButtonText, completedAt && styles.completedButtonText]}>
-              {completedAt ? '완료됨' : isSaving ? '저장 중…' : '✅ 탑승 완료'}
+              {completedAt ? '완료됨' : isSaving ? '저장 중…' : '탑승 완료'}
             </Text>
           </Pressable>
         </View>
@@ -156,15 +159,15 @@ export default function VehicleResults({
             summary={summary}
             badges={[
               isSelfDrive
-                ? { label: '🏠 자차 송영', tone: 'warning' }
-                : { label: '🏫 센터 차량', tone: 'success' },
+                ? { label: '자차 송영', icon: 'home', tone: 'warning' }
+                : { label: '센터 차량', icon: 'center', tone: 'success' },
               ack
-                ? { label: `✅ ${formatAckTime(ack.acknowledged_at)} 확인`, tone: 'success' }
-                : { label: '⏳ 확인 대기', tone: 'default' },
+                ? { label: `${formatAckTime(ack.acknowledged_at)} 확인`, icon: 'done', tone: 'success' }
+                : { label: '확인 대기', icon: 'waiting', tone: 'default' },
             ]}
           >
             {isSelfDrive && !!startAddress && (
-              <Text style={styles.originAddress}>🏠 1회차 출발: {startAddress}</Text>
+              <Text style={styles.originAddress}>1회차 출발 · {startAddress}</Text>
             )}
             <Text style={styles.vehicleCapacity}>
               정원 {vehicle.capacity}명 · 최대 2회
@@ -232,7 +235,7 @@ const styles = StyleSheet.create({
   completedText: { color: '#667085', textDecorationLine: 'line-through' },
   completedAt: { color: '#237B4B', fontSize: 11, fontWeight: '800', marginTop: 5 },
   actionColumn: { width: 89, gap: 7 },
-  singleNaviButton: { backgroundColor: '#0BA38E', borderRadius: 9, paddingVertical: 9, alignItems: 'center' },
+  singleNaviButton: { flexDirection: 'row', gap: 5, backgroundColor: '#0BA38E', borderRadius: 8, paddingVertical: 9, alignItems: 'center', justifyContent: 'center' },
   singleNaviText: { color: '#FFFFFF', fontSize: 12, fontWeight: '900' },
   completeButton: { backgroundColor: '#0BA38E', borderRadius: 9, paddingVertical: 9, alignItems: 'center' },
   completeButtonText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900' },

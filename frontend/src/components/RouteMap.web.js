@@ -63,7 +63,7 @@ const centerMarkerHtml = `
     background: #0D2540; border: 2.5px solid #FFFFFF;
     box-shadow: 0 2px 8px rgba(15,23,42,0.4);
     color: #FFFFFF; font-weight: 800; font-size: 12px; white-space: nowrap;
-  ">🏫 센터</div>`;
+  ">센터</div>`;
 
 export default function RouteMap({ center, vehicles, focusVehicleId }) {
   const containerRef = useRef(null);
@@ -174,7 +174,7 @@ export default function RouteMap({ center, vehicles, focusVehicleId }) {
   if (!KAKAO_JS_KEY) {
     return (
       <View style={[styles.card, styles.fallback]}>
-        <Text style={styles.fallbackTitle}>🗺️ 지도를 표시하려면 카카오맵 자바스크립트 키가 필요합니다</Text>
+        <Text style={styles.fallbackTitle}>지도를 표시하려면 카카오맵 자바스크립트 키가 필요합니다</Text>
         <Text style={styles.fallbackBody}>
           지오코딩에 쓰는 REST API 키와는 별개의 키입니다.{'\n\n'}
           1. Kakao Developers → 내 애플리케이션 → 앱 키 → <Text style={styles.mono}>JavaScript 키</Text> 복사{'\n'}

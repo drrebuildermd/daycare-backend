@@ -6,8 +6,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 // forbidden = 같은 차·같은 회차에 함께 태우면 안 되는 조합 (기피)
 // required  = 반드시 같은 차·같은 회차에 태워야 하는 조합 (짝꿍)
 const RULE_KINDS = [
-  { key: 'forbidden', label: '🚫 동승 불가', hint: '두 분을 서로 다른 운행으로 갈라 배차합니다.' },
-  { key: 'required', label: '🤝 필수 동승', hint: '두 분을 같은 차 같은 회차에 함께 배차합니다.' },
+  { key: 'forbidden', label: '동승 불가', hint: '두 분을 서로 다른 운행으로 갈라 배차합니다.' },
+  { key: 'required', label: '필수 동승', hint: '두 분을 같은 차 같은 회차에 함께 배차합니다.' },
 ];
 
 const pairKey = (a, b) => [a, b].sort().join('|');
@@ -117,9 +117,9 @@ export default function PairRuleEditor({ passengers, rules, onChange }) {
             return (
               <View key={`${rule.kind}-${pairKey(...rule.passengerIds)}`} style={styles.ruleRow}>
                 <Text style={[styles.ruleText, stale && styles.ruleTextStale]}>
-                  {rule.kind === 'forbidden' ? '🚫' : '🤝'}{' '}
+                  {rule.kind === 'forbidden' ? '갈라서' : '함께'}{' · '}
                   {nameOf[rule.passengerIds[0]] || '삭제된 어르신'}
-                  {' ↔ '}
+                  {' · '}
                   {nameOf[rule.passengerIds[1]] || '삭제된 어르신'}
                   {stale ? ' (결석·삭제됨)' : ''}
                 </Text>

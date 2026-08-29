@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import Text from '../ui/Text';
+import Icon from '../ui/Icon';
+import { color } from '../theme';
 import { Pressable, StyleSheet, Switch, TextInput, View, TouchableOpacity } from 'react-native';
 
 import AddressSearch from './AddressSearch';
@@ -42,9 +44,11 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
       summary={summary}
       badges={[
         attending
-          ? (hasGuardianPhone ? { label: '출석', tone: 'success' } : { label: '연락처 없음', tone: 'warning' })
-          : { label: '결석', tone: 'default' },
-        ...(smsOptIn ? [] : [{ label: '🔕 알림 끔', tone: 'warning' }]),
+          ? (hasGuardianPhone
+            ? { label: '탑승', icon: 'done', tone: 'success' }
+            : { label: '연락처 없음', icon: 'warning', tone: 'warning' })
+          : { label: '미탑승', tone: 'default' },
+        ...(smsOptIn ? [] : [{ label: '알림 끔', icon: 'bellOff', tone: 'warning' }]),
       ]}
       tone={attending ? 'default' : 'muted'}
       onRemove={onRemove}
@@ -52,7 +56,7 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
       <View style={styles.attendanceRow}>
         <View>
           <Text style={[styles.attendanceLabel, !attending && styles.absentLabel]}>
-            {attending ? '🟢 출석' : '⚪ 결석'}
+            {attending ? '오늘 탑승' : '오늘 미탑승'}
           </Text>
           <Text style={styles.switchCaption}>
             {attending ? '오늘 배차에 포함됩니다.' : '명단은 유지되고 오늘 배차에서만 빠집니다.'}
@@ -76,9 +80,12 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
         keyboardType="phone-pad"
       />
       {attending && !hasGuardianPhone && (
-        <Text style={styles.phoneWarning}>
-          ⚠️ 번호가 없으면 탑승 완료 문자가 발송되지 않습니다.
-        </Text>
+        <View style={styles.warnRow}>
+          <Icon name="warning" size={14} tint="#8A6100" />
+          <Text style={styles.phoneWarning}>
+            번호가 없으면 탑승 완료 문자가 발송되지 않습니다.
+          </Text>
+        </View>
       )}
 
       <Field
@@ -90,14 +97,14 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
       />
 
       {/* 기사님이 📞 를 눌렀을 때 누구에게 걸지. 어르신마다 다르다. */}
-      <Text style={styles.label}>대표 연락처 (기사님 📞 버튼)</Text>
+      <Text style={styles.label}>대표 연락처 (기사님 전화 버튼)</Text>
       <View style={styles.toggleRow}>
         <Pressable
           style={[styles.toggle, !callsSelf && styles.toggleOn]}
           onPress={() => set('primaryContact', 'guardian')}
         >
           <Text style={[styles.toggleText, !callsSelf && styles.toggleTextOn]}>
-            👨‍👩‍👦 보호자
+            보호자
           </Text>
         </Pressable>
         <Pressable
@@ -105,22 +112,32 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
           onPress={() => set('primaryContact', 'self')}
         >
           <Text style={[styles.toggleText, callsSelf && styles.toggleTextOn]}>
-            🧑 어르신 본인
+            어르신 본인
           </Text>
         </Pressable>
       </View>
       {callsSelf && !hasOwnPhone && (
-        <Text style={styles.phoneWarning}>
-          ⚠️ 본인 연락처가 없어 기사님 📞 는 보호자에게 연결됩니다.
-        </Text>
+        <View style={styles.warnRow}>
+          <Icon name="warning" size={14} tint="#8A6100" />
+          <Text style={styles.phoneWarning}>
+            본인 연락처가 없어 전화는 보호자에게 연결됩니다.
+          </Text>
+        </View>
       )}
 
       {/* 알림을 원치 않는 보호자가 있다. 명단에서 지우는 대신 여기서 끈다. */}
       <View style={styles.attendanceRow}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.attendanceLabel}>
-            {smsOptIn ? '🔔 탑승 완료 알림 보내기' : '🔕 탑승 완료 알림 끔'}
-          </Text>
+          <View style={styles.labelRow}>
+            <Icon
+              name={smsOptIn ? 'bellOn' : 'bellOff'}
+              size={15}
+              tint={smsOptIn ? color.teal : color.textSecondary}
+            />
+            <Text style={styles.attendanceLabel}>
+              {smsOptIn ? '탑승 완료 알림 보내기' : '탑승 완료 알림 끔'}
+            </Text>
+          </View>
           <Text style={styles.switchCaption}>
             {smsOptIn
               ? '탑승하시면 보호자에게 문자를 보냅니다.'
@@ -138,12 +155,13 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
       {/* 개조된 주소 검색 영역 */}
       <View style={{ marginBottom: 15 }}>
         <Text style={styles.label}>주소</Text>
-        <TouchableOpacity 
-          style={{ backgroundColor: '#0BA38E', padding: 12, borderRadius: 8, marginTop: 5 }}
+        <TouchableOpacity
+          style={styles.addressButton}
           onPress={() => setIsAddressModalOpen(true)}
         >
-          <Text style={{ color: 'white', textAlign: 'center', fontWeight: 'bold' }}>
-            📍 {value.address ? "주소 다시 검색하기" : "정확한 주소 찾기"}
+          <Icon name="search" size={15} tint="#FFFFFF" />
+          <Text style={styles.addressButtonText}>
+            {value.address ? '주소 다시 검색하기' : '정확한 주소 찾기'}
           </Text>
         </TouchableOpacity>
         
@@ -205,6 +223,10 @@ const styles = StyleSheet.create({
   absentLabel: { color: '#667085' },
   field: { marginBottom: 12 },
   label: { color: '#667085', fontWeight: '700', fontSize: 13, marginBottom: 6 },
+  warnRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  addressButton: { flexDirection: 'row', gap: 6, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0D2540', paddingVertical: 12, borderRadius: 10, marginTop: 5 },
+  addressButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   toggleRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   toggle: { flex: 1, borderRadius: 12, borderWidth: 1.5, borderColor: '#E4E7EC', backgroundColor: '#F8F9FB', paddingVertical: 11, alignItems: 'center' },
   toggleOn: { borderColor: '#0BA38E', backgroundColor: '#E9F7EF' },

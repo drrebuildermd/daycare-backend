@@ -46,6 +46,7 @@ const NAME = {
   add: 'plus',
   search: 'map-marker-radius-outline',
   chevronDown: 'chevron-down',
+  chevronRight: 'chevron-right',
   chevronUp: 'chevron-up',
   back: 'arrow-left',
 };

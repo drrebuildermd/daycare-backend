@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import Text from '../ui/Text';
+import Icon from '../ui/Icon';
+import { color } from '../theme';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import Accordion from './Accordion';
@@ -37,9 +39,9 @@ export default function VehicleForm({ value, index, onChange, onRemove }) {
       summary={summary}
       badges={[
         isCustomStart
-          ? { label: '🏠 자차 송영', tone: 'warning' }
-          : { label: '🏫 센터 차량', tone: 'success' },
-        ...(hasDriverPhone ? [] : [{ label: '📵 번호 없음', tone: 'warning' }]),
+          ? { label: '자차 송영', icon: 'home', tone: 'warning' }
+          : { label: '센터 차량', icon: 'center', tone: 'success' },
+        ...(hasDriverPhone ? [] : [{ label: '연락처 없음', icon: 'warning', tone: 'warning' }]),
       ]}
       onRemove={onRemove}
     >
@@ -90,16 +92,18 @@ export default function VehicleForm({ value, index, onChange, onRemove }) {
           style={[styles.toggle, !isCustomStart && styles.toggleOn]}
           onPress={() => set('startType', 'center')}
         >
+          <Icon name="center" size={15} tint={!isCustomStart ? color.teal : color.textSecondary} />
           <Text style={[styles.toggleText, !isCustomStart && styles.toggleTextOn]}>
-            🏫 센터에서 출발
+            센터에서 출발
           </Text>
         </Pressable>
         <Pressable
           style={[styles.toggle, isCustomStart && styles.toggleOn]}
           onPress={() => set('startType', 'custom')}
         >
+          <Icon name="home" size={15} tint={isCustomStart ? color.teal : color.textSecondary} />
           <Text style={[styles.toggleText, isCustomStart && styles.toggleTextOn]}>
-            🏠 다른 주소지 (자차)
+            다른 주소지 (자차)
           </Text>
         </Pressable>
       </View>
@@ -107,17 +111,21 @@ export default function VehicleForm({ value, index, onChange, onRemove }) {
       {isCustomStart ? (
         <View style={styles.startBox}>
           <Pressable style={styles.searchButton} onPress={() => setIsAddressOpen(true)}>
+            <Icon name="search" size={15} tint="#FFFFFF" />
             <Text style={styles.searchButtonText}>
-              📍 {startAddress ? '출발지 다시 검색하기' : '출발지 주소 찾기'}
+              {startAddress ? '출발지 다시 검색하기' : '출발지 주소 찾기'}
             </Text>
           </Pressable>
 
           {startAddress ? (
             <Text style={styles.startAddress}>{startAddress}</Text>
           ) : (
-            <Text style={styles.startWarning}>
-              ⚠️ 주소를 넣지 않으면 배차 계산이 거절됩니다.
-            </Text>
+            <View style={styles.warnRow}>
+              <Icon name="warning" size={14} tint="#8A6100" />
+              <Text style={styles.startWarning}>
+                주소를 넣지 않으면 배차 계산이 거절됩니다.
+              </Text>
+            </View>
           )}
 
           <Text style={styles.startHint}>
@@ -154,12 +162,13 @@ const styles = StyleSheet.create({
   label: { color: '#667085', fontWeight: '700', fontSize: 13, marginBottom: 6 },
   input: { backgroundColor: '#F8F9FB', borderWidth: 1, borderColor: '#E4E7EC', borderRadius: 12, paddingHorizontal: 13, height: 48, fontSize: 16, color: '#0D2540' },
   toggleRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
-  toggle: { flex: 1, borderRadius: 12, borderWidth: 1.5, borderColor: '#E4E7EC', backgroundColor: '#F8F9FB', paddingVertical: 11, alignItems: 'center' },
+  warnRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  toggle: { flex: 1, flexDirection: 'row', gap: 5, justifyContent: 'center', borderRadius: 12, borderWidth: 1.5, borderColor: '#E4E7EC', backgroundColor: '#F8F9FB', paddingVertical: 11, alignItems: 'center' },
   toggleOn: { borderColor: '#0BA38E', backgroundColor: '#E9F7EF' },
   toggleText: { color: '#667085', fontSize: 12.5, fontWeight: '800' },
   toggleTextOn: { color: '#0BA38E' },
   startBox: { backgroundColor: '#FEF6E7', borderWidth: 1, borderColor: '#F2B84B', borderRadius: 12, padding: 12, gap: 8 },
-  searchButton: { backgroundColor: '#0BA38E', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  searchButton: { flexDirection: 'row', gap: 6, justifyContent: 'center', backgroundColor: '#0D2540', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
   searchButtonText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
   startAddress: { color: '#0D2540', fontSize: 14, fontWeight: '700', backgroundColor: '#FFFFFF', borderRadius: 8, padding: 10 },
   startWarning: { color: '#8A6100', fontSize: 12.5, fontWeight: '700' },

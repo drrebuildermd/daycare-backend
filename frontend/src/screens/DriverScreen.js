@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Text from '../ui/Text';
+import Icon from '../ui/Icon';
+import { color } from '../theme';
 import { ActivityIndicator, Alert, BackHandler, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import {
@@ -245,15 +247,19 @@ export default function DriverScreen({ onExit }) {
                     <View style={styles.selfBadge}>
                       <Text style={styles.selfBadgeText}>자차 송영</Text>
                     </View>
+                    <Icon name="home" size={14} tint={color.textSecondary} />
                     <Text style={styles.vehiclePickStart} numberOfLines={2}>
-                      🏠 {item.start_address}
+                      {item.start_address}
                     </Text>
                   </View>
                 ) : (
                   // 센터 출발이면 긴 주소 대신 등록된 센터명을 보여준다.
-                  <Text style={styles.vehiclePickCenter}>
-                    🏫 {item.start_name || '센터'}에서 출발
-                  </Text>
+                  <View style={styles.startRow}>
+                    <Icon name="center" size={14} tint={color.textSecondary} />
+                    <Text style={styles.vehiclePickCenter}>
+                      {item.start_name || '센터'}에서 출발
+                    </Text>
+                  </View>
                 )}
               </Pressable>
             );
@@ -287,9 +293,10 @@ export default function DriverScreen({ onExit }) {
 
       <ScrollView contentContainerStyle={styles.listBody}>
         <View style={[styles.ackBar, ackedAt && styles.ackBarDone]}>
+          {!!ackedAt && <Icon name="done" size={16} tint="#237B4B" />}
           <Text style={[styles.ackText, ackedAt && styles.ackTextDone]}>
             {ackedAt
-              ? `✅ 배차표를 확인했습니다 (${formatAckTime(ackedAt)})`
+              ? `배차표를 확인했습니다 (${formatAckTime(ackedAt)})`
               : '오늘 배차표를 확인하셨으면 눌러 주세요. 관리자에게 전달됩니다.'}
           </Text>
           {!ackedAt && (
@@ -302,7 +309,7 @@ export default function DriverScreen({ onExit }) {
         </View>
 
         <Accordion
-          title="🗺️ 오늘 내 동선 지도"
+          title="오늘 내 동선"
           summary={`${totalStops}곳 · 눌러서 펼치기`}
         >
           <RouteMap
@@ -336,13 +343,17 @@ export default function DriverScreen({ onExit }) {
                       <Text style={styles.seqText}>{stop.sequence}</Text>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.stopName, doneAt && styles.stopNameDone]}>
-                        {stop.name}
-                        {stop.wheelchair ? '  ♿' : ''}
-                      </Text>
+                      <View style={styles.stopNameRow}>
+                        <Text style={[styles.stopName, doneAt && styles.stopNameDone]}>
+                          {stop.name}
+                        </Text>
+                        {!!stop.wheelchair && (
+                          <Icon name="wheelchair" size={15} tint={color.textSecondary} />
+                        )}
+                      </View>
                       <Text style={styles.stopAddress}>{stop.address}</Text>
                       {!!stop.detail_address && (
-                        <Text style={styles.stopDetail}>🏠 {stop.detail_address}</Text>
+                        <Text style={styles.stopDetail}>{stop.detail_address}</Text>
                       )}
                     </View>
                     <Text style={styles.stopTime}>{stop.estimated_pickup}</Text>
@@ -353,7 +364,7 @@ export default function DriverScreen({ onExit }) {
                       style={[styles.action, styles.actionNavi]}
                       onPress={() => openNavigation(stop, trip, stopIndex)}
                     >
-                      <Text style={styles.actionIcon}>🧭</Text>
+                      <Icon name="navigate" size={22} tint={color.teal} />
                       <Text style={styles.actionLabel}>내비</Text>
                     </Pressable>
 
@@ -361,7 +372,11 @@ export default function DriverScreen({ onExit }) {
                       style={[styles.action, styles.actionCall, !phoneTarget && styles.actionOff]}
                       onPress={() => callContact(stop)}
                     >
-                      <Text style={styles.actionIcon}>📞</Text>
+                      <Icon
+                        name="phone"
+                        size={22}
+                        tint={phoneTarget ? color.deepNavy : color.textSecondary}
+                      />
                       <Text style={styles.actionLabel}>{phoneTarget ? phoneTarget.label : '번호없음'}</Text>
                     </Pressable>
 
@@ -374,7 +389,7 @@ export default function DriverScreen({ onExit }) {
                         <ActivityIndicator color="#FFFFFF" />
                       ) : (
                         <>
-                          <Text style={styles.actionIcon}>{doneAt ? '✅' : '🚌'}</Text>
+                          <Icon name={doneAt ? 'done' : 'boarded'} size={22} tint="#FFFFFF" />
                           <Text style={[styles.actionLabel, styles.actionLabelOnDark]}>
                             {doneAt ? '완료됨' : '탑승 완료'}
                           </Text>
@@ -420,6 +435,7 @@ const styles = StyleSheet.create({
   vehiclePickMeta: { color: '#667085', fontSize: 14, marginTop: 8 },
   vehiclePickStart: { color: '#8A6100', fontSize: 13, fontWeight: '700', lineHeight: 19, flexShrink: 1 },
   vehiclePickCenter: { color: '#0BA38E', fontSize: 13, fontWeight: '700', marginTop: 6 },
+  stopNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   startRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 6 },
   selfBadge: { backgroundColor: '#FEF6E7', borderWidth: 1, borderColor: '#F2B84B', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   selfBadgeText: { color: '#8A6100', fontSize: 11, fontWeight: '900' },
@@ -453,7 +469,6 @@ const styles = StyleSheet.create({
   actionCall: { backgroundColor: '#FEF6E7', borderWidth: 1.5, borderColor: '#F2B84B' },
   actionDone: { backgroundColor: '#0BA38E' },
   actionOff: { opacity: 0.45 },
-  actionIcon: { fontSize: 22 },
   actionLabel: { color: '#0D2540', fontSize: 13, fontWeight: '800' },
   actionLabelOnDark: { color: '#FFFFFF' },
 

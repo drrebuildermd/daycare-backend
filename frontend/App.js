@@ -4,6 +4,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Text from './src/ui/Text';
 import { brand, color } from './src/theme';
+import Icon from './src/ui/Icon';
 import {
   ActivityIndicator,
   Alert,
@@ -447,7 +448,7 @@ export default function App() {
         ...(smsLines.length ? ['', '── 문자 ──', ...smsLines.map((line) => `· ${line}`)] : []),
       ].join('\n');
       Alert.alert(
-        outcome.sent > 0 ? `🚨 ${outcome.sent}대 발송 완료` : '발송된 알림이 없습니다',
+        outcome.sent > 0 ? `${outcome.sent}대에 배차를 전송했습니다` : '전송된 알림이 없습니다',
         body,
       );
     } catch (error) {
@@ -582,7 +583,8 @@ export default function App() {
                 <Text style={styles.addButtonText}>＋ 차량 추가</Text>
               </Pressable>
               <Pressable style={styles.nextButton} onPress={() => setScreen('input')}>
-                <Text style={styles.optimizeButtonText}>대상자 입력으로 →</Text>
+                <Text style={styles.optimizeButtonText}>대상자 입력으로</Text>
+                <Icon name="chevronRight" size={20} tint="#FFFFFF" />
               </Pressable>
 
               <View style={styles.driverPanelSpacing}>
@@ -602,7 +604,7 @@ export default function App() {
                   onPress={() => setIsCenterAddressModalOpen(true)}
                 >
                   <Text style={{ color: 'white', textAlign: 'center', fontWeight: 'bold' }}>
-                    {center.address ? '주소 다시 검색하기' : '📍 정확한 센터 주소 찾기'}
+                    {center.address ? '주소 다시 검색하기' : '정확한 센터 주소 찾기'}
                   </Text>
                 </TouchableOpacity>
 
@@ -623,7 +625,8 @@ export default function App() {
                   <Text style={styles.sectionCaption}>출석 {passengerCount}명 · 등록 차량 2회 최대 {maxPassengerCapacity}명</Text>
                 </View>
                 <Pressable style={styles.excelButton} onPress={importExcel}>
-                  <Text style={styles.excelButtonText}>📊 엑셀 불러오기</Text>
+                  <Icon name="excel" size={15} tint={color.teal} />
+                  <Text style={styles.excelButtonText}>엑셀 불러오기</Text>
                 </Pressable>
               </View>
               {!!excelName && <Text style={styles.fileName}>불러온 파일: {excelName}</Text>}
@@ -664,12 +667,13 @@ export default function App() {
               {/* 폴링이 살아 있는지 눈으로 확인할 수 있어야 한다.
                   시각이 멈춰 있으면 서버와 끊긴 것이고, 눌러서 즉시 다시 맞출 수 있다. */}
               <Pressable style={styles.syncBar} onPress={syncLiveState} disabled={syncing}>
+                <Icon name="refresh" size={13} tint="#07705F" />
                 <Text style={styles.syncText}>
                   {syncing
-                    ? '🔄 갱신 중...'
+                    ? '갱신 중...'
                     : syncedAt
-                      ? `🔄 ${formatClock(syncedAt)} 기준 · 눌러서 새로고침`
-                      : '🔄 아직 갱신되지 않았습니다 · 눌러서 새로고침'}
+                      ? `${formatClock(syncedAt)} 기준 · 눌러서 새로고침`
+                      : '아직 갱신되지 않았습니다 · 눌러서 새로고침'}
                 </Text>
               </Pressable>
               {!!focusVehicleId && (
@@ -687,10 +691,16 @@ export default function App() {
                 >
                   {sending
                     ? <ActivityIndicator color="#FFFFFF" />
-                    : <Text style={styles.exportButtonText}>📤 배차 전송</Text>}
+                    : (
+                      <>
+                        <Icon name="send" size={15} tint="#FFFFFF" />
+                        <Text style={styles.exportButtonText}>배차 전송</Text>
+                      </>
+                    )}
                 </Pressable>
                 <Pressable style={styles.exportButton} onPress={downloadTodayLog}>
-                  <Text style={styles.exportButtonText}>📊 송영 일지</Text>
+                  <Icon name="report" size={15} tint="#FFFFFF" />
+                  <Text style={styles.exportButtonText}>송영 일지</Text>
                 </Pressable>
               </View>
               <VehicleResults
@@ -718,7 +728,12 @@ export default function App() {
             >
               {loading
                 ? <ActivityIndicator color="#FFFFFF" />
-                : <Text style={styles.fabText}>🚐 최적 배차 계산하기</Text>}
+                : (
+                  <>
+                    <Icon name="route" size={20} tint="#FFFFFF" />
+                    <Text style={styles.fabText}>최적 배차 계산하기</Text>
+                  </>
+                )}
             </Pressable>
           </View>
         )}
@@ -765,12 +780,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18, alignItems: 'center',
     paddingBottom: Platform.select({ android: 96, ios: 34, default: 24 }),
   },
-  fab: { width: '100%', maxWidth: 520, backgroundColor: '#0BA38E', borderRadius: 999, height: 58, alignItems: 'center', justifyContent: 'center', shadowColor: '#0D2540', shadowOpacity: 0.28, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 8 },
+  fab: { flexDirection: 'row', gap: 8, width: '100%', maxWidth: 520, backgroundColor: '#0BA38E', borderRadius: 999, height: 58, alignItems: 'center', justifyContent: 'center', shadowColor: '#0D2540', shadowOpacity: 0.28, shadowRadius: 14, shadowOffset: { width: 0, height: 6 }, elevation: 8 },
   fabText: { color: '#FFFFFF', fontSize: 17, fontWeight: '900' },
   // 버튼이 가리는 만큼 스크롤 끝에 자리를 비운다. 안 그러면 마지막 항목이 가린다.
   fabSpacer: { height: Platform.select({ android: 168, ios: 106, default: 96 }) },
   optimizeButton: { backgroundColor: '#0BA38E', borderRadius: 15, height: 56, alignItems: 'center', justifyContent: 'center', shadowColor: '#0BA38E', shadowOpacity: 0.22, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 4 },
-  nextButton: { backgroundColor: '#07705F', borderRadius: 15, height: 54, alignItems: 'center', justifyContent: 'center' },
+  nextButton: { flexDirection: 'row', gap: 6, backgroundColor: '#07705F', borderRadius: 15, height: 54, alignItems: 'center', justifyContent: 'center' },
   optimizeButtonText: { color: '#FFFFFF', fontSize: 17, fontWeight: '900' },
   disabledButton: { opacity: 0.6 },
   hint: { color: '#98A2B3', fontSize: 11, textAlign: 'center', marginTop: 10 },

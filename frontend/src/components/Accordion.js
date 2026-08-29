@@ -1,5 +1,14 @@
 import React, { useState } from 'react';
 import Text from '../ui/Text';
+import Icon from '../ui/Icon';
+import { color } from '../theme';
+
+// 배지 아이콘은 글자와 같은 색이어야 한다. 따로 두면 색이 어긋난다.
+const BADGE_TINT = {
+  default: color.textSecondary,
+  success: '#237B4B',
+  warning: '#8A6100',
+};
 import { Pressable, StyleSheet, View } from 'react-native';
 
 /**
@@ -59,8 +68,8 @@ export default function Accordion({
             )}
           </View>
 
-          {/* 펼침 방향을 화살표로 알린다. 접힌 카드가 눌리는 것인지 모르면 아무도 안 누른다. */}
-          <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
+          {/* 펼침 방향을 알린다. 접힌 카드가 눌리는 것인지 모르면 아무도 안 누른다. */}
+          <Icon name={open ? 'chevronUp' : 'chevronDown'} size={20} tint={color.textSecondary} />
         </View>
 
         {/* 배지는 아랫줄에 둔다. 윗줄에 같이 두면 배지가 늘어날 때마다
@@ -72,6 +81,13 @@ export default function Accordion({
                 key={item.label}
                 style={[styles.badge, styles[`badge_${item.tone || 'default'}`]]}
               >
+                {!!item.icon && (
+                  <Icon
+                    name={item.icon}
+                    size={12}
+                    tint={BADGE_TINT[item.tone || 'default']}
+                  />
+                )}
                 <Text style={[styles.badgeText, styles[`badgeText_${item.tone || 'default'}`]]}>
                   {item.label}
                 </Text>
@@ -96,27 +112,26 @@ export default function Accordion({
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: '#FFFFFF', borderRadius: 16, marginBottom: 10, borderWidth: 1, borderColor: '#E4E7EC', overflow: 'hidden' },
+  card: { backgroundColor: '#FFFFFF', borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#E4E7EC', overflow: 'hidden' },
   cardMuted: { backgroundColor: '#F8F9FB', borderColor: '#E4E7EC' },
   header: { paddingHorizontal: 14, paddingVertical: 13 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 9 },
-  numberBadge: { width: 26, height: 26, borderRadius: 9, backgroundColor: '#E6F7F4', alignItems: 'center', justifyContent: 'center' },
+  numberBadge: { width: 26, height: 26, borderRadius: 8, backgroundColor: '#E6F7F4', alignItems: 'center', justifyContent: 'center' },
   numberBadgeMuted: { backgroundColor: '#E4E7EC' },
-  number: { color: '#07705F', fontWeight: '800', fontSize: 12 },
+  number: { color: '#07705F', fontWeight: '700', fontSize: 12 },
   headerText: { flex: 1, minWidth: 0 },
-  title: { color: '#0D2540', fontSize: 15, fontWeight: '800' },
+  title: { color: '#0D2540', fontSize: 15, fontWeight: '700' },
   titleMuted: { color: '#98A2B3', textDecorationLine: 'line-through' },
   summary: { color: '#667085', fontSize: 12, marginTop: 2 },
-  badge: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
   badge_default: { backgroundColor: '#F2F4F7' },
   badge_success: { backgroundColor: '#E9F7EF' },
   badge_warning: { backgroundColor: '#FEF6E7' },
-  badgeText: { fontSize: 11, fontWeight: '800' },
+  badgeText: { fontSize: 11, fontWeight: '600' },
   badgeText_default: { color: '#667085' },
   badgeText_success: { color: '#237B4B' },
   badgeText_warning: { color: '#8A6100' },
-  chevron: { color: '#98A2B3', fontSize: 11, fontWeight: '900' },
   body: { paddingHorizontal: 14, paddingBottom: 14, borderTopWidth: 1, borderColor: '#F2F4F7', paddingTop: 14 },
   removeButton: { alignSelf: 'flex-end', paddingHorizontal: 12, paddingVertical: 7 },
   removeText: { color: '#D64545', fontWeight: '700', fontSize: 13 },

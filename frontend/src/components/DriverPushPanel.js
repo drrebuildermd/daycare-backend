@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import Text from '../ui/Text';
+import Icon from '../ui/Icon';
+import { color } from '../theme';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { enablePushForDriver, getPushEnvironment } from '../push';
@@ -46,7 +48,7 @@ export default function DriverPushPanel({ vehicles }) {
   if (!environment.supported) {
     return (
       <View style={styles.card}>
-        <Text style={styles.title}>📱 기사님 알림 설정</Text>
+        <Text style={styles.title}>기사님 알림 설정</Text>
         <Text style={styles.body}>{environment.message}</Text>
         {environment.reason === 'web' && (
           <Text style={styles.hint}>
@@ -60,7 +62,7 @@ export default function DriverPushPanel({ vehicles }) {
   if (!drivers.length) {
     return (
       <View style={styles.card}>
-        <Text style={styles.title}>📱 기사님 알림 설정</Text>
+        <Text style={styles.title}>기사님 알림 설정</Text>
         <Text style={styles.body}>
           차량에 담당 기사 이름을 먼저 입력하면 여기에 표시됩니다.
         </Text>
@@ -70,7 +72,7 @@ export default function DriverPushPanel({ vehicles }) {
 
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>📱 기사님 알림 설정</Text>
+      <Text style={styles.title}>기사님 알림 설정</Text>
       <Text style={styles.body}>
         이 폰을 쓰시는 분의 이름을 눌러 주세요. 관리자가 배차를 전송하면 알림이 옵니다.
       </Text>
@@ -89,7 +91,7 @@ export default function DriverPushPanel({ vehicles }) {
                 <ActivityIndicator size="small" color="#0BA38E" />
               ) : (
                 <Text style={[styles.chipText, isDone && styles.chipTextDone]}>
-                  {isDone ? `✅ ${name} 선생님` : `${name} 선생님`}
+                  {`${name} 선생님`}
                 </Text>
               )}
             </Pressable>
