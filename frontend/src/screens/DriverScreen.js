@@ -293,28 +293,29 @@ export default function DriverScreen({ onExit, bottomInset = 0 }) {
                 <Text style={styles.vehiclePickMeta}>
                   {item.driver_name ? `${item.driver_name} 선생님 · ` : ''}총 {total}명
                 </Text>
-                {item.start_type === 'custom' ? (
-                  <View style={styles.startBlock}>
+                <View style={styles.startBlock}>
+                  {item.start_type === 'custom' && (
                     <View style={styles.selfBadge}>
                       <Text style={styles.selfBadgeText}>자차 송영</Text>
                     </View>
-                    {/* 출발지는 기사님에게 중요한 운행 정보다. 줄을 통째로 내준다. */}
-                    <View style={styles.startRow}>
-                      <Icon name="home" size={14} tint={color.textSecondary} />
+                  )}
+                  {/* 어디서 떠나 어디서 끝나는지는 회차마다 다르다.
+                      등원 자차는 자택에서 떠나고, 하원 자차는 자택에서 끝난다.
+                      차량 등록 정보로 짐작하지 말고 회차가 말하는 것을 적는다. */}
+                  {(item.trips || []).filter((trip) => trip.used).map((trip) => (
+                    <View key={trip.round} style={styles.startRow}>
+                      <Icon
+                        name={trip.destination_name === item.start_name ? 'home' : 'center'}
+                        size={14}
+                        tint={color.textSecondary}
+                      />
                       <Text style={styles.vehiclePickStart} numberOfLines={2}>
-                        {item.start_address}
+                        {trip.round}회차 · {trip.origin_name || '센터'} 출발 →{' '}
+                        {trip.destination_name || '센터'} 도착
                       </Text>
                     </View>
-                  </View>
-                ) : (
-                  // 센터 출발이면 긴 주소 대신 등록된 센터명을 보여준다.
-                  <View style={styles.startRow}>
-                    <Icon name="center" size={14} tint={color.textSecondary} />
-                    <Text style={styles.vehiclePickCenter}>
-                      {item.start_name || '센터'}에서 출발
-                    </Text>
-                  </View>
-                )}
+                  ))}
+                </View>
               </Pressable>
             );
           })}

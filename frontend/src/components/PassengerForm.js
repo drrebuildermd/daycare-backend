@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import TextInput from '../ui/TextInput';
 import Text from '../ui/Text';
 import Icon from '../ui/Icon';
-import { TRIP_OUTBOUND, STAY_HOURS, shiftTime } from '../api';
+import { STAY_HOURS, shiftTime } from '../api';
 import { color } from '../theme';
 import { Pressable, StyleSheet, Switch, View, TouchableOpacity } from 'react-native';
 
@@ -20,7 +20,7 @@ const Field = ({ label, ...props }) => (
   </View>
 );
 
-export default function PassengerForm({ value, index, onChange, onRemove, tripType }) {
+export default function PassengerForm({ value, index, onChange, onRemove }) {
   const set = (field, nextValue) => onChange({ ...value, [field]: nextValue });
   // 명단에는 남기고 배차에서만 빼기 위한 값. 기존 데이터에는 없으므로 기본을 출석으로 본다.
   const attending = value.attending !== false;
@@ -33,16 +33,11 @@ export default function PassengerForm({ value, index, onChange, onRemove, tripTy
   // 기존 명단에는 이 값이 없으므로 둘 다 탑승으로 본다.
   const attendingOutbound = value.attendingOutbound !== false;
 
-  // 등원을 보고 있으면 픽업 시각을, 하원을 보고 있으면 하차 시각을 고친다.
-  // 한 화면에 네 칸을 다 두면 어느 것이 지금 쓰는 값인지 헷갈린다.
-  const editingOutbound = tripType === TRIP_OUTBOUND;
-  const timeWord = editingOutbound ? '하차' : '픽업';
-  const startKey = editingOutbound ? 'dropoffStart' : 'pickupStart';
-  const endKey = editingOutbound ? 'dropoffEnd' : 'pickupEnd';
   // 하차 시각을 비워두면 서버가 등원 시각 + 8시간으로 정한다.
   // 그 값을 미리 보여줘야 원장님이 '비워도 되는구나' 를 안다.
-  const autoStart = editingOutbound ? shiftTime(value.pickupStart) : '';
-  const autoEnd = editingOutbound ? shiftTime(value.pickupEnd) : '';
+  const autoStart = shiftTime(value.pickupStart);
+  const autoEnd = shiftTime(value.pickupEnd);
+  const dropoffBlank = !(value.dropoffStart || '').trim() && !(value.dropoffEnd || '').trim();
   const callsSelf = value.primaryContact === 'self';
 
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
@@ -95,6 +90,36 @@ export default function PassengerForm({ value, index, onChange, onRemove, tripTy
         />
       </View>
 
+      {/* 켠 스위치 바로 밑에 그 시간칸을 둔다. 상단 토글과 무관하게
+          여기서 등원·하원 시각을 모두 고칠 수 있다. */}
+      {attending && (
+        <View style={styles.timeBlock}>
+          <View style={styles.timeRow}>
+            <View style={styles.timeField}>
+              <Field
+                label="픽업 하한"
+                value={value.pickupStart}
+                onChangeText={(text) => set('pickupStart', text)}
+                placeholder="08:00"
+                keyboardType="numbers-and-punctuation"
+                maxLength={5}
+              />
+            </View>
+            <Text style={styles.tilde}>~</Text>
+            <View style={styles.timeField}>
+              <Field
+                label="픽업 상한"
+                value={value.pickupEnd}
+                onChangeText={(text) => set('pickupEnd', text)}
+                placeholder="08:30"
+                keyboardType="numbers-and-punctuation"
+                maxLength={5}
+              />
+            </View>
+          </View>
+        </View>
+      )}
+
       <View style={styles.attendanceRow}>
         <View style={styles.attendanceText}>
           <View style={styles.labelRow}>
@@ -118,6 +143,42 @@ export default function PassengerForm({ value, index, onChange, onRemove, tripTy
           thumbColor={attendingOutbound ? '#3BB273' : '#F8F9FB'}
         />
       </View>
+
+      {attendingOutbound && (
+        <View style={styles.timeBlock}>
+          <View style={styles.timeRow}>
+            <View style={styles.timeField}>
+              <Field
+                label="하차 하한"
+                value={value.dropoffStart}
+                onChangeText={(text) => set('dropoffStart', text)}
+                placeholder={autoStart || '15:30'}
+                keyboardType="numbers-and-punctuation"
+                maxLength={5}
+              />
+            </View>
+            <Text style={styles.tilde}>~</Text>
+            <View style={styles.timeField}>
+              <Field
+                label="하차 상한"
+                value={value.dropoffEnd}
+                onChangeText={(text) => set('dropoffEnd', text)}
+                placeholder={autoEnd || '17:00'}
+                keyboardType="numbers-and-punctuation"
+                maxLength={5}
+              />
+            </View>
+          </View>
+          {dropoffBlank && (
+            <Text style={styles.autoHint}>
+              {autoStart
+                ? `비워두면 등원 ${value.pickupStart}~${value.pickupEnd} 에 ${STAY_HOURS}시간을 더해 `
+                  + `${autoStart}~${autoEnd} 로 자동 계산됩니다.`
+                : `비워두면 등원 시각에 ${STAY_HOURS}시간을 더해 자동 계산됩니다.`}
+            </Text>
+          )}
+        </View>
+      )}
       <Field label="어르신 이름" value={value.name} onChangeText={(text) => set('name', text)} placeholder="홍길동" />
       
       {/* 보호자 연락처. 비어 있으면 탑승 완료 문자가 발송되지 않는다. */}
@@ -241,37 +302,6 @@ export default function PassengerForm({ value, index, onChange, onRemove, tripTy
         onClose={() => setIsAddressModalOpen(false)}
       />
       
-      <View style={styles.timeRow}>
-        <View style={styles.timeField}>
-          <Field
-            label={`${timeWord} 하한`}
-            value={value[startKey]}
-            onChangeText={(text) => set(startKey, text)}
-            placeholder={editingOutbound ? (autoStart || '15:30') : '08:00'}
-            keyboardType="numbers-and-punctuation"
-            maxLength={5}
-          />
-        </View>
-        <Text style={styles.tilde}>~</Text>
-        <View style={styles.timeField}>
-          <Field
-            label={`${timeWord} 상한`}
-            value={value[endKey]}
-            onChangeText={(text) => set(endKey, text)}
-            placeholder={editingOutbound ? (autoEnd || '17:00') : '08:30'}
-            keyboardType="numbers-and-punctuation"
-            maxLength={5}
-          />
-        </View>
-      </View>
-      {editingOutbound && !(value.dropoffStart || '').trim() && !(value.dropoffEnd || '').trim() && (
-        <Text style={styles.autoHint}>
-          {autoStart
-            ? `비워두면 등원 ${value.pickupStart}~${value.pickupEnd} 에 ${STAY_HOURS}시간을 더해 `
-              + `${autoStart}~${autoEnd} 로 자동 계산됩니다.`
-            : `비워두면 등원 시각에 ${STAY_HOURS}시간을 더해 자동 계산됩니다.`}
-        </Text>
-      )}
       <View style={styles.switchRow}>
         <View>
           <Text style={styles.switchTitle}>휠체어 이용</Text>
@@ -307,6 +337,8 @@ const styles = StyleSheet.create({
   phoneWarning: { color: '#8A6100', fontSize: 12, fontWeight: '700', marginTop: -6, marginBottom: 12, lineHeight: 17 },
   input: { backgroundColor: '#F8F9FB', borderWidth: 1, borderColor: '#E4E7EC', borderRadius: 12, paddingHorizontal: 13, height: 48, fontSize: 16, color: '#0D2540' },
   timeRow: { flexDirection: 'row', alignItems: 'center' },
+  // 스위치와 그 시간칸을 한 덩어리로 묶어 어디에 딸린 값인지 보이게 한다.
+  timeBlock: { backgroundColor: '#F8F9FB', borderRadius: 12, padding: 12, marginBottom: 12 },
   timeField: { flex: 1 },
   autoHint: { color: '#07705F', backgroundColor: '#E6F7F4', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 12, lineHeight: 18, marginBottom: 12 },
   tilde: { color: '#667085', fontWeight: '800', marginHorizontal: 9, marginTop: 6 },

@@ -166,9 +166,15 @@ export default function VehicleResults({
                 : { label: '확인 대기', icon: 'waiting', tone: 'default' },
             ]}
           >
-            {isSelfDrive && !!startAddress && (
-              <Text style={styles.originAddress}>1회차 출발 · {startAddress}</Text>
-            )}
+            {/* 어디서 떠나 어디서 끝나는지는 회차마다 다르다.
+                등원 자차는 자택에서 떠나고, 하원 자차는 자택에서 끝난다.
+                차량 등록 정보로 짐작하지 말고 회차가 말하는 것을 그대로 적는다. */}
+            {(vehicle.trips || []).filter((trip) => trip.used).map((trip) => (
+              <Text key={trip.round} style={styles.originAddress}>
+                {trip.round}회차 · {trip.origin_name || '센터'} 출발 →{' '}
+                {trip.destination_name || '센터'} 도착
+              </Text>
+            ))}
             <Text style={styles.vehicleCapacity}>
               정원 {vehicle.capacity}명 · 최대 2회
             </Text>

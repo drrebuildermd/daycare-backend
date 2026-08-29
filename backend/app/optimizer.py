@@ -409,12 +409,17 @@ def optimize_routes(
                     )
             total_distance += route_distance
             start_node, end_node = endpoints[trip_index]
+            origin, destination = resolved[start_node], resolved[end_node]
             trips.append(
                 TripResult(
                     round=round_number,
                     used=used,
-                    origin_name=resolved[start_node].name,
-                    destination_name=resolved[end_node].name,
+                    origin_name=origin.name,
+                    origin_latitude=origin.latitude,
+                    origin_longitude=origin.longitude,
+                    destination_name=destination.name,
+                    destination_latitude=destination.latitude,
+                    destination_longitude=destination.longitude,
                     passenger_count=len(route_nodes),
                     capacity=vehicle.capacity,
                     departure_time=format_hhmm(departure) if used else None,

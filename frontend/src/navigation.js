@@ -28,9 +28,15 @@ const asPoint = (candidate) => {
  * 이 정류장으로 갈 때의 출발지를 정한다.
  *
  * 기사님은 순서대로 도니까, 두 번째 어르신부터는 바로 앞 어르신 댁에 있다.
- * 첫 번째는 그 회차의 출발점이다.
- *   1회차 - 차량 출발지 (자차 송영이면 기사님 자택, 아니면 센터)
- *   2회차 - 센터 (1회차를 마치고 센터로 복귀한 상태)
+ * 첫 번째는 그 회차가 실제로 떠나는 자리다.
+ *
+ * 그 자리를 앱이 짐작하면 안 된다. 예전에는 '자차면 1회차는 자택 출발' 로
+ * 계산했는데, 등원에서는 맞지만 하원에서는 틀린다. 하원 1회차는 센터에서
+ * 떠나고 자택은 마지막 회차의 도착지다. 그대로 두면 기사님이 아침에 집에서
+ * 출발하는 길을 오후에도 안내받는다.
+ *
+ * 엔진이 회차마다 출발 좌표를 실어 보낸다. 그걸 쓴다.
+ * (구형 배차 결과에는 그 값이 없으므로 그때만 차량·센터로 물러선다)
  */
 export function originForStop({ vehicle, trip, stopIndex, center }) {
   if (stopIndex > 0) {
@@ -39,6 +45,13 @@ export function originForStop({ vehicle, trip, stopIndex, center }) {
     if (point) return point;
   }
 
+  const fromEngine = asPoint({
+    latitude: trip?.origin_latitude,
+    longitude: trip?.origin_longitude,
+  });
+  if (fromEngine) return fromEngine;
+
+  // 구형 배차 결과 대비. 그때는 등원뿐이었으므로 예전 규칙이 맞다.
   if (trip?.round === 1) {
     const start = asPoint({
       latitude: vehicle?.start_latitude,

@@ -218,8 +218,15 @@ class StopResult(BaseModel):
 class TripResult(BaseModel):
     # 이 회차가 실제로 어디서 떠나 어디서 끝나는지.
     # 하원 마지막 회차는 센터가 아니라 기사님 자택에서 끝난다.
+    #
+    # 앱이 '자차면 1회차는 자택 출발' 이라고 짐작하면 하원에서 틀린다.
+    # 내비게이션 출발지도 여기서 가져가야 엉뚱한 곳에서 길을 잡지 않는다.
     origin_name: str | None = None
+    origin_latitude: float | None = None
+    origin_longitude: float | None = None
     destination_name: str | None = None
+    destination_latitude: float | None = None
+    destination_longitude: float | None = None
     round: int
     used: bool
     passenger_count: int

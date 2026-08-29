@@ -709,7 +709,6 @@ function AdminApp() {
                   key={passenger.localId}
                   value={passenger}
                   index={index}
-                  tripType={tripType}
                   onChange={(next) => updatePassenger(index, next)}
                   onRemove={() => setPassengers((current) => current.filter((_, itemIndex) => itemIndex !== index))}
                 />
