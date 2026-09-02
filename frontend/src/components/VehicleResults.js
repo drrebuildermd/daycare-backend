@@ -115,6 +115,10 @@ export default function VehicleResults({
     (vehicle) => !focusVehicleId || vehicle.vehicle_id === focusVehicleId,
   );
   const unassigned = result.unassigned_passengers || [];
+  // 빠진 이유가 다르면 원장님이 할 일도 다르다. 리프트가 없어서 빠진 분에게
+  // '시간 범위를 넓히세요' 라고 하면 아무리 넓혀도 해결되지 않는다.
+  const liftBlocked = unassigned.filter((item) => item.reason === 'wheelchair');
+  const capacityBlocked = unassigned.filter((item) => item.reason !== 'wheelchair');
 
   return (
     <View>
@@ -128,13 +132,38 @@ export default function VehicleResults({
               {unassigned.length}명의 배차가 누락되었습니다
             </Text>
           </View>
-          <Text style={styles.dropNames}>
-            {unassigned.map((item) => item.name).join(', ')}
-          </Text>
-          <Text style={styles.dropHelp}>
-            해당 어르신의 시간 범위를 넓히거나, 투입 차량(또는 회차)을 추가한 뒤
-            다시 계산해 보세요.
-          </Text>
+          {liftBlocked.length > 0 && (
+            <View style={styles.dropGroup}>
+              <View style={styles.dropReason}>
+                <Icon name="wheelchair" size={15} tint="#9B2C2C" />
+                <Text style={styles.dropReasonText}>휠체어 고정석 부족</Text>
+              </View>
+              <Text style={styles.dropNames}>
+                {liftBlocked.map((item) => item.name).join(', ')}
+              </Text>
+              <Text style={styles.dropHelp}>
+                차량 관리에서 휠체어 전용 좌석 수를 확인해 주세요. 리프트 차량이
+                없으면 시간 범위를 넓혀도 배차되지 않습니다.
+              </Text>
+            </View>
+          )}
+          {capacityBlocked.length > 0 && (
+            <View style={styles.dropGroup}>
+              {liftBlocked.length > 0 && (
+                <View style={styles.dropReason}>
+                  <Icon name="warning" size={15} tint="#9B2C2C" />
+                  <Text style={styles.dropReasonText}>정원·시간 부족</Text>
+                </View>
+              )}
+              <Text style={styles.dropNames}>
+                {capacityBlocked.map((item) => item.name).join(', ')}
+              </Text>
+              <Text style={styles.dropHelp}>
+                해당 어르신의 시간 범위를 넓히거나, 투입 차량(또는 회차)을 추가한 뒤
+                다시 계산해 보세요.
+              </Text>
+            </View>
+          )}
         </View>
       )}
 
@@ -227,6 +256,9 @@ export default function VehicleResults({
 
 const styles = StyleSheet.create({
   // 놓치면 안 되는 경고다. 결과 카드보다 먼저, 더 눈에 띄게 둔다.
+  dropGroup: { marginTop: 8 },
+  dropReason: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 },
+  dropReasonText: { color: '#9B2C2C', fontSize: 12, fontWeight: '800' },
   dropCard: { backgroundColor: '#FCEDED', borderWidth: 1, borderColor: '#D64545',
     borderRadius: 12, padding: 16, marginBottom: 16 },
   dropHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },

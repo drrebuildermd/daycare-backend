@@ -319,6 +319,7 @@ def _archive_vehicles(request: OptimizeRequest, resolved) -> None:
             "driver_name": vehicle.driver_name,
             "driver_phone": vehicle.driver_phone,
             "capacity": vehicle.capacity,
+            "wheelchair_capacity": vehicle.wheelchair_capacity,
             "start_type": vehicle.start_type,
             "start_address": vehicle.start_address,
             "updated_at": datetime.now(KST).replace(microsecond=0).isoformat(),

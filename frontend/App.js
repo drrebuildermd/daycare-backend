@@ -83,6 +83,8 @@ const emptyVehicle = () => ({
   plateNumber: '',
   driverName: '',
   capacity: '4',
+  // 휠체어 고정석. 리프트가 없는 차량이 기본이라 0에서 시작한다.
+  wheelchairCapacity: '0',
   // 자차 송영. 기본은 센터 출발.
   driverPhone: '',
   startType: 'center',
@@ -319,6 +321,9 @@ function AdminApp() {
       const capacity = Number(vehicle.capacity);
       if (!vehicle.vehicleType.trim() || !vehicle.plateNumber.trim()) return `${index + 1}번 차량의 차종과 차량번호를 입력해 주세요.`;
       if (!Number.isInteger(capacity) || capacity < 1 || capacity > 100) return `${vehicle.plateNumber} 차량의 정원은 1~100 사이의 정수여야 합니다.`;
+      const wheelchairCapacity = Number(vehicle.wheelchairCapacity || 0);
+      if (!Number.isInteger(wheelchairCapacity) || wheelchairCapacity < 0) return `${vehicle.plateNumber} 차량의 휠체어 좌석 수는 0 이상의 정수여야 합니다.`;
+      if (wheelchairCapacity > capacity) return `${vehicle.plateNumber} 차량의 휠체어 좌석(${wheelchairCapacity}자리)이 총 정원(${capacity}명)보다 많습니다.`;
       if (plateNumbers.has(vehicle.plateNumber.trim())) return `차량번호 ${vehicle.plateNumber}가 중복되었습니다.`;
       plateNumbers.add(vehicle.plateNumber.trim());
     }
@@ -375,6 +380,7 @@ function AdminApp() {
           driver_name: (vehicle.driverName || '').trim() || null,
           driver_phone: (vehicle.driverPhone || '').trim() || null,
           capacity: Number(vehicle.capacity),
+          wheelchair_capacity: Number(vehicle.wheelchairCapacity || 0),
           start_type: vehicle.startType === 'custom' ? 'custom' : 'center',
           start_address: (vehicle.startAddress || '').trim() || null,
           // 좌표는 백엔드가 주소로 변환한다. 비어 있으면 보내지 않는다.

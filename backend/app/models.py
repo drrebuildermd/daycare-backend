@@ -122,12 +122,27 @@ class VehicleInput(BaseModel):
     # 배차가 확정되면 이 번호로 안내 문자를 보낸다.
     driver_phone: str | None = Field(default=None, max_length=20)
     capacity: int = Field(ge=1, le=100)
+    # 휠체어 고정석 수. 일반 정원과 별개로 센다.
+    # 어르신이 휠체어에서 내려 일반 좌석에 앉기도 하고 휠체어째 리프트석에
+    # 고정하기도 해서, 한 숫자로 뭉뚱그리면 어느 쪽도 맞지 않는다.
+    # 0 이면 리프트 없는 차량이고 휠체어 어르신이 배정되지 않는다.
+    wheelchair_capacity: int = Field(default=0, ge=0, le=100)
     # 자차 송영: 기사님이 센터가 아니라 자택 등에서 출발하는 경우.
     # 'center' 면 센터에서, 'custom' 이면 start_address 에서 출발한다.
     start_type: Literal["center", "custom"] = "center"
     start_address: str | None = Field(default=None, max_length=200)
     start_latitude: Latitude | None = None
     start_longitude: Longitude | None = None
+
+    @model_validator(mode="after")
+    def wheelchair_seats_fit(self):
+        # 휠체어석이 전체 정원보다 많을 수는 없다.
+        if self.wheelchair_capacity > self.capacity:
+            raise ValueError(
+                f"{self.plate_number} 차량의 휠체어석({self.wheelchair_capacity}자리)이 "
+                f"총 정원({self.capacity}명)보다 많습니다."
+            )
+        return self
 
     @model_validator(mode="after")
     def custom_start_needs_address(self):
@@ -291,6 +306,12 @@ class UnassignedPassenger(BaseModel):
     passenger_id: str
     name: str
     requested_window: str
+    # 왜 빠졌는지. 원장님이 무엇을 고쳐야 할지 알아야 한다.
+    #   capacity  - 정원이나 시간이 안 맞음
+    #   wheelchair - 휠체어 고정석이 있는 차량이 모자람
+    reason: Literal["capacity", "wheelchair"] = "capacity"
+    # 휠체어를 쓰는 분인지. 화면에서 아이콘을 붙이는 데 쓴다.
+    wheelchair: bool = False
 
 
 class OptimizeResponse(BaseModel):

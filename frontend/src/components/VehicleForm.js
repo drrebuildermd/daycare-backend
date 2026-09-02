@@ -25,12 +25,15 @@ export default function VehicleForm({ value, index, onChange, onRemove }) {
   // 기존 차량 데이터에는 이 값이 없으므로 센터 출발을 기본으로 본다.
   const isCustomStart = value.startType === 'custom';
   const startAddress = (value.startAddress || '').trim();
+  // 기존 차량 데이터에는 이 값이 없다. 없으면 리프트 없음으로 본다.
+  const wheelchairSeats = Number(value.wheelchairCapacity) || 0;
 
   // 접혔을 때 보이는 한 줄. 여기만 봐도 무엇이 저장돼 있는지 알 수 있어야 한다.
   const summary = [
     plate || '차량번호 미입력',
     driver ? `(담당: ${driver})` : '(담당 미지정)',
     value.capacity ? `· ${value.capacity}인승` : '',
+    wheelchairSeats > 0 ? `· 휠체어 ${wheelchairSeats}석` : '',
   ].filter(Boolean).join(' ');
 
   return (
@@ -42,6 +45,9 @@ export default function VehicleForm({ value, index, onChange, onRemove }) {
         isCustomStart
           ? { label: '자차 송영', icon: 'home', tone: 'warning' }
           : { label: '센터 차량', icon: 'center', tone: 'success' },
+        ...(wheelchairSeats > 0
+          ? [{ label: `휠체어 ${wheelchairSeats}석`, icon: 'wheelchair', tone: 'success' }]
+          : []),
         ...(hasDriverPhone ? [] : [{ label: '연락처 없음', icon: 'warning', tone: 'warning' }]),
       ]}
       onRemove={onRemove}
@@ -78,13 +84,28 @@ export default function VehicleForm({ value, index, onChange, onRemove }) {
       </Text>
 
       <Field
-        label="최대 탑승 인원"
+        label="총 탑승 정원"
         value={value.capacity}
         onChangeText={(text) => set('capacity', text.replace(/[^0-9]/g, ''))}
         placeholder="예: 7"
         keyboardType="number-pad"
         maxLength={3}
       />
+
+      <Field
+        label="휠체어 전용 좌석 수"
+        value={value.wheelchairCapacity}
+        onChangeText={(text) =>
+          set('wheelchairCapacity', text.replace(/[^0-9]/g, ''))
+        }
+        placeholder="예: 1 (리프트가 없으면 0)"
+        keyboardType="number-pad"
+        maxLength={3}
+      />
+      <Text style={styles.startHint}>
+        휠체어를 탄 채로 고정할 수 있는 자리 수입니다. 총 정원과 따로 셉니다.
+        {'\n'}0으로 두면 휠체어 이용 어르신을 이 차량에 배차하지 않습니다.
+      </Text>
 
       {/* --- 자차 송영 --- */}
       <Text style={styles.label}>1회차 출발지</Text>

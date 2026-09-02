@@ -30,6 +30,8 @@ class VehicleSpec:
     driver_name: str | None
     driver_phone: str | None
     capacity: int
+    # 휠체어 고정석 수. 0 이면 리프트 없는 차량이다.
+    wheelchair_capacity: int = 0
     # 1회차 출발 노드. 0 이면 센터, 그 외는 자차 출발지 노드.
     start_node: int = 0
 
@@ -164,7 +166,9 @@ DROP_PENALTY = 10_000_000
 TIME_SPAN_COEFFICIENT = 2
 
 ENGINE_VERSION = "CARE_ENGINE_V2.1"
-CONSTRAINT_VERSION = "CARE_CONSTRAINT_V2.1"
+# v3.1 에서 휠체어 고정석 제약이 추가됐다. 제약이 바뀌면 결과도 바뀌므로
+# 이 값을 올려야 예전 기록과 나란히 놓고 비교할 수 있다.
+CONSTRAINT_VERSION = "CARE_CONSTRAINT_V3.1"
 OBJECTIVE_VERSION = "CARE_OBJECTIVE_V2.1"
 
 
@@ -311,6 +315,7 @@ def optimize_routes(
                 driver_name=vehicle.driver_name,
                 driver_phone=vehicle.driver_phone,
                 capacity=vehicle.capacity,
+                wheelchair_capacity=vehicle.wheelchair_capacity,
                 start_node=start_node,
             )
         )
@@ -415,6 +420,31 @@ def optimize_routes(
         [spec.capacity for spec, _ in trip_specs],
         True,
         "Capacity",
+    )
+
+    # 휠체어 고정석은 일반 좌석과 따로 센다.
+    #
+    # 어르신이 휠체어에서 내려 일반 좌석에 앉기도 하고 휠체어째 리프트석에
+    # 고정하기도 한다. 두 가지를 한 숫자로 뭉뚱그리면 어느 쪽도 맞지 않아서
+    # 차원을 하나 더 둔다.
+    #
+    # 리프트 없는 차량은 이 정원이 0 이다. 휠체어 어르신의 수요가 1 이므로
+    # 0 을 넘게 되어 그 차에는 원천적으로 실리지 못한다. 적합성 제약을
+    # 따로 걸 필요가 없다.
+    wheelchair_demands = [0] + [
+        1 if passenger.wheelchair else 0 for passenger in request.passengers
+    ]
+    wheelchair_demands += [0] * (len(resolved) - len(wheelchair_demands))
+
+    def wheelchair_demand_callback(index: int) -> int:
+        return wheelchair_demands[manager.IndexToNode(index)]
+
+    routing.AddDimensionWithVehicleCapacity(
+        routing.RegisterUnaryTransitCallback(wheelchair_demand_callback),
+        0,
+        [spec.wheelchair_capacity for spec, _ in trip_specs],
+        True,
+        "Wheelchair",
     )
 
     solver = routing.solver()
@@ -657,24 +687,56 @@ def optimize_routes(
     # 배차에 못 넣은 어르신을 모은다.
     # 전체를 실패로 돌리는 대신 여기에 담아 보내면, 원장님이 무엇을 고쳐야
     # 하는지 알 수 있고 나머지 배차는 그대로 쓸 수 있다.
-    unassigned = [
-        UnassignedPassenger(
-            passenger_id=passenger_ids[node - 1],
-            name=request.passengers[node - 1].name,
-            requested_window="{}~{}".format(
-                *request.passengers[node - 1].window(trip_type, stay_minutes)
-            ),
+    # 휠체어 고정석이 모자라서 빠진 것인지, 정원·시간이 안 맞아서 빠진 것인지
+    # 갈라 준다. 원장님이 리프트 차량을 불러야 하는지 시간을 넓혀야 하는지
+    # 알 수 없으면 안내가 없는 것과 같다.
+    wheelchair_seats = sum(spec.wheelchair_capacity for spec in vehicles)
+    wheelchair_riders = sum(1 for p in request.passengers if p.wheelchair)
+    unassigned = []
+    for node in range(1, passenger_count + 1):
+        if node in assigned_nodes:
+            continue
+        passenger = request.passengers[node - 1]
+        # 휠체어를 쓰는 분인데 고정석 총량이 이미 다 찼거나 아예 없으면
+        # 시간을 넓혀도 해결되지 않는다. 차량 문제다.
+        blocked_by_lift = (
+            passenger.wheelchair and wheelchair_seats < wheelchair_riders
         )
-        for node in range(1, passenger_count + 1)
-        if node not in assigned_nodes
-    ]
+        unassigned.append(
+            UnassignedPassenger(
+                passenger_id=passenger_ids[node - 1],
+                name=passenger.name,
+                requested_window="{}~{}".format(
+                    *passenger.window(trip_type, stay_minutes)
+                ),
+                reason="wheelchair" if blocked_by_lift else "capacity",
+                wheelchair=passenger.wheelchair,
+            )
+        )
+
     if unassigned:
-        dropped = ", ".join(item.name for item in unassigned)
-        notices.insert(
-            0,
-            f"{len(unassigned)}명을 배차하지 못했습니다: {dropped}."
-            " 시간 범위를 넓히거나 차량(또는 회차)을 늘린 뒤 다시 계산해 주세요.",
-        )
+        lift_short = [i for i in unassigned if i.reason == "wheelchair"]
+        plain = [i for i in unassigned if i.reason == "capacity"]
+        # 사유가 다르면 고칠 방법도 다르므로 문구를 나눠 넣는다.
+        if plain:
+            names = ", ".join(item.name for item in plain)
+            notices.insert(
+                0,
+                f"{len(plain)}명을 배차하지 못했습니다: {names}."
+                " 시간 범위를 넓히거나 차량(또는 회차)을 늘린 뒤 다시 계산해 주세요.",
+            )
+        if lift_short:
+            names = ", ".join(item.name for item in lift_short)
+            detail = (
+                "휠체어 고정석이 있는 차량이 없습니다"
+                if wheelchair_seats == 0
+                else f"휠체어 고정석이 {wheelchair_seats}자리뿐입니다"
+            )
+            notices.insert(
+                0,
+                f"휠체어 이용 {len(lift_short)}명을 배차하지 못했습니다: {names}."
+                f" {detail}. 차량 관리에서 휠체어 전용 좌석 수를 확인해 주세요.",
+            )
 
     # 솔버가 무엇을 얼마나 비싸게 봤는지 같은 계수로 다시 계산한다.
     # OR-Tools 는 총합만 주고 항목별로는 나눠주지 않는다.
