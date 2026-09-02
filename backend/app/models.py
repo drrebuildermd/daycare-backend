@@ -261,6 +261,25 @@ class CenterResult(BaseModel):
     longitude: float
 
 
+class ObjectiveBreakdown(BaseModel):
+    """솔버가 무엇을 얼마나 비싸게 봤는지 항목별로 나눈 것.
+
+    OR-Tools 는 총합만 돌려주고 항목별 기여도를 주지 않는다. 그래서 해를 받은 뒤
+    같은 계수로 다시 계산한다. 값의 단위는 미터다. 거리 1m 가 1이다.
+
+    나중에 '왜 경로 A 가 아니라 B 였나' 를 물으면 이 값들이 답이 된다.
+    """
+
+    distance_m: int = 0
+    second_run_count: int = 0
+    second_run_penalty: int = 0
+    time_span_minutes: int = 0
+    time_span_penalty: int = 0
+    unassigned_count: int = 0
+    unassigned_penalty: int = 0
+    total: int = 0
+
+
 class UnassignedPassenger(BaseModel):
     """배차에 넣지 못한 어르신.
 
@@ -285,6 +304,11 @@ class OptimizeResponse(BaseModel):
     notices: list[str] = Field(default_factory=list)
     # 물리적으로 태울 방법이 없어 빠진 어르신. 비어 있으면 전원 배차됐다는 뜻이다.
     unassigned_passengers: list[UnassignedPassenger] = Field(default_factory=list)
+    # 이 계산이 남긴 이력의 식별자. 배차를 전송할 때 이 값을 함께 보내면
+    # 최종안이 어느 원안에서 나왔는지 이어진다.
+    optimization_run_id: str | None = None
+    # 솔버가 무엇을 얼마나 비싸게 봤는지.
+    objective_breakdown: ObjectiveBreakdown | None = None
 
 
 class RideCompletionCreate(BaseModel):

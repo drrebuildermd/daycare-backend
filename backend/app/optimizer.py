@@ -9,6 +9,7 @@ from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 from .config import Settings
 from .geocoding import ResolvedLocation
 from .models import (
+    ObjectiveBreakdown,
     UnassignedPassenger,
     CenterResult,
     OptimizeRequest,
@@ -145,6 +146,26 @@ def _kakao_navi_url(destination: ResolvedLocation) -> str:
     return (
         f"kakaomap://route?ep={destination.latitude},{destination.longitude}&by=CAR"
     )
+
+
+# ── 목적함수를 이루는 값 ──────────────────────────────────────
+#
+# 비용의 단위는 미터다. 거리 1m 가 1이다.
+# 그래서 아래 값들은 '몇 km 를 더 달리는 것과 같은가' 로 읽으면 된다.
+#
+# 이 값을 바꾸면 배차 성향이 바뀐다. 어떤 판으로 풀었는지 남겨야
+# 나중에 'V1.2 가 V1.1 보다 나았나' 를 물을 수 있어서 버전을 함께 둔다.
+
+# 두 번째 회차를 쓰는 값. 20km 를 더 달리는 것과 같다.
+SECOND_RUN_PENALTY = 20_000
+# 어르신 한 분을 배차에서 빼는 값. 10,000km 라 사실상 마지막 수단이다.
+DROP_PENALTY = 10_000_000
+# 전체 운행이 걸리는 시간(분)에 붙는 값. 1분을 2m 로 친다.
+TIME_SPAN_COEFFICIENT = 2
+
+ENGINE_VERSION = "CARE_ENGINE_V2.1"
+CONSTRAINT_VERSION = "CARE_CONSTRAINT_V2.1"
+OBJECTIVE_VERSION = "CARE_OBJECTIVE_V2.1"
 
 
 def trip_endpoints(home_node: int, round_number: int, trip_type: str) -> tuple[int, int]:
@@ -354,7 +375,7 @@ def optimize_routes(
     time_index = routing.RegisterTransitCallback(time_callback)
     routing.AddDimension(time_index, 24 * 60, 24 * 60, False, "Time")
     time_dimension = routing.GetDimensionOrDie("Time")
-    time_dimension.SetGlobalSpanCostCoefficient(2)
+    time_dimension.SetGlobalSpanCostCoefficient(TIME_SPAN_COEFFICIENT)
 
     passenger_windows: dict[str, tuple[int, int]] = {}
     for node, passenger in enumerate(request.passengers, start=1):
@@ -372,7 +393,9 @@ def optimize_routes(
         routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(start_index))
         routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(end_index))
         # 두 번째 회차는 값을 더 매겨 꼭 필요할 때만 쓰게 한다.
-        routing.SetFixedCostOfVehicle(0 if trip_index % 2 == 0 else 20_000, trip_index)
+        routing.SetFixedCostOfVehicle(
+            0 if trip_index % 2 == 0 else SECOND_RUN_PENALTY, trip_index
+        )
         # 출발지와 도착지가 다른 회차는, 어르신을 태우지 않아도 그 거리를 실제로 달린다.
         # 자차 하원 2회차가 그렇다. 이 비용을 세지 않으면 솔버는 그 이동을 공짜로 보고
         # 2회차를 쓸지 말지를 잘못 저울질한다.
@@ -435,7 +458,6 @@ def optimize_routes(
     # 정원이나 시간이 도저히 안 맞으면 전체를 포기하는 대신 그 어르신만 빼고 푼다.
     # 예전에는 422 를 던져서 원장님이 무엇을 고쳐야 할지 알 수 없었다.
     # 벌점은 어떤 경로 비용보다도 크게 둔다. 뺄 수 있으면 빼는 쪽이 싸 보이면 안 된다.
-    DROP_PENALTY = 10_000_000
     for node in range(1, passenger_count + 1):
         routing.AddDisjunction([manager.NodeToIndex(node)], DROP_PENALTY)
 
@@ -654,6 +676,33 @@ def optimize_routes(
             " 시간 범위를 넓히거나 차량(또는 회차)을 늘린 뒤 다시 계산해 주세요.",
         )
 
+    # 솔버가 무엇을 얼마나 비싸게 봤는지 같은 계수로 다시 계산한다.
+    # OR-Tools 는 총합만 주고 항목별로는 나눠주지 않는다.
+    used_trips = [t for v in vehicle_results for t in v.trips if t.used]
+    second_runs = sum(1 for t in used_trips if t.round == 2)
+    minutes = [
+        parse_hhmm(value)
+        for t in used_trips
+        for value in (t.departure_time, t.return_time)
+        if value
+    ]
+    span = (max(minutes) - min(minutes)) if minutes else 0
+    breakdown = ObjectiveBreakdown(
+        distance_m=total_distance,
+        second_run_count=second_runs,
+        second_run_penalty=second_runs * SECOND_RUN_PENALTY,
+        time_span_minutes=span,
+        time_span_penalty=span * TIME_SPAN_COEFFICIENT,
+        unassigned_count=len(unassigned),
+        unassigned_penalty=len(unassigned) * DROP_PENALTY,
+    )
+    breakdown.total = (
+        breakdown.distance_m
+        + breakdown.second_run_penalty
+        + breakdown.time_span_penalty
+        + breakdown.unassigned_penalty
+    )
+
     return OptimizeResponse(
         trip_type=trip_type,
         status="optimal_or_feasible",
@@ -669,4 +718,5 @@ def optimize_routes(
         vehicles=vehicle_results,
         notices=notices,
         unassigned_passengers=unassigned,
+        objective_breakdown=breakdown,
     )

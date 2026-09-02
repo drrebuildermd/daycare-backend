@@ -29,14 +29,21 @@ ACK_TABLE = "dispatch_acks"
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 
 
-def save_dispatch(result: OptimizeResponse, service_date: date) -> None:
+def save_dispatch(
+    result: OptimizeResponse, service_date: date, center_id: str = "default"
+) -> None:
     now = datetime.now(KST).replace(microsecond=0).isoformat()
     row = {
         "service_date": service_date.isoformat(),
         "trip_type": result.trip_type,
         "payload": result.model_dump(mode="json"),
+        "center_id": center_id,
         "updated_at": now,
     }
+    # 이 배차가 어느 계산에서 나왔는지 잇는다. 원장님이 손으로 고쳤더라도
+    # 출발점이 된 원안은 남아야 '무엇을 얼마나 고쳤나' 를 볼 수 있다.
+    if result.optimization_run_id:
+        row["source_run_id"] = result.optimization_run_id
     try:
         # trip_type 이 키에 없으면 하원 배차가 등원 배차를 덮어쓴다.
         get_supabase().table(TABLE).upsert(

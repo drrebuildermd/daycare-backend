@@ -51,6 +51,7 @@ from app.models import (
     RideCompletionRecord,
 )
 from app.optimizer import optimize_routes
+from app.runs import record_optimization_run
 from app.supabase_client import (
     MISSING_MESSAGE,
     PUBLISHABLE_WARNING,
@@ -382,14 +383,16 @@ def delete_driver_device(expo_push_token: str) -> None:
 
 
 @app.post("/api/dispatch/notify", response_model=DispatchNotifyResult)
-async def send_dispatch(result: OptimizeResponse) -> DispatchNotifyResult:
+async def send_dispatch(
+    result: OptimizeResponse, settings: Settings = Depends(get_settings)
+) -> DispatchNotifyResult:
     """배차를 확정한다. 저장하고, 기사님 폰으로 푸시와 문자를 보낸다.
 
     원장님이 계산 결과를 눈으로 확인하고 [배차 전송]을 누른 시점이 확정이다.
     계산할 때마다 나가면 아직 정하지도 않은 배차가 기사님께 통보된다.
     """
     service_date = today_kst()
-    save_dispatch(result, service_date)
+    save_dispatch(result, service_date, settings.center_id)
     outcome = await notify_drivers(result, service_date)
 
     # 앱을 안 깔았거나 푸시를 못 받는 기사님도 있다. 문자는 따로 나간다.
@@ -491,6 +494,12 @@ async def run_optimization(
         response.notices.append(f"{label} 미탑승 {absent_count}명은 배차에서 제외했습니다.")
     _archive_passengers(request, resolved)
     _archive_vehicles(request, resolved)
+
+    # 이 계산을 했다는 사실을 남긴다. 실패해도 None 이 올 뿐 배차는 그대로 나간다.
+    # 같은 날 두 번째 줄이 쌓이면 그 자체가 '앞 결과를 다시 짰다' 는 신호다.
+    response.optimization_run_id = record_optimization_run(
+        request, response, today_kst(), settings
+    )
     # 여기서는 문자를 보내지 않는다. 계산은 원장님이 결과를 보려고 여러 번
     # 누르는 단계다. 확정 전에 기사님께 통보되면 안 된다.
     # 문자는 [배차 전송]을 눌렀을 때(/api/dispatch/notify) 나간다.

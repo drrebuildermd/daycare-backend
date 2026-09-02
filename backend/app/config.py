@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     supabase_url: str | None = None
     supabase_key: str | None = None
     cors_origins: str = "*"
+    # 센터 식별자. 지금은 한 곳뿐이라 기본값으로 두지만, 이 값을 나중에
+    # 넣으면 이미 쌓인 기록에는 소급할 수 없어 지금부터 채운다.
+    center_id: str = "default"
     average_speed_kph: float = 25.0
     road_distance_factor: float = 1.25
     stop_service_minutes: int = 3
