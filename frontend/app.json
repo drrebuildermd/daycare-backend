@@ -2,7 +2,7 @@
   "expo": {
     "name": "마중ON",
     "slug": "daycare-routing-mobile",
-    "version": "2.0.0",
+    "version": "3.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
@@ -17,7 +17,7 @@
     "android": {
       "package": "com.daycare.routing",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 14,
+      "versionCode": 15,
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
