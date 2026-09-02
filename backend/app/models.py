@@ -261,6 +261,19 @@ class CenterResult(BaseModel):
     longitude: float
 
 
+class UnassignedPassenger(BaseModel):
+    """배차에 넣지 못한 어르신.
+
+    정원이 모자라거나 희망 시각을 지킬 방법이 없을 때 생긴다.
+    전체를 실패로 돌리면 원장님은 무엇을 고쳐야 할지 알 수 없다.
+    누가 왜 빠졌는지 알려주고 나머지는 그대로 쓰게 한다.
+    """
+
+    passenger_id: str
+    name: str
+    requested_window: str
+
+
 class OptimizeResponse(BaseModel):
     trip_type: TripType = "inbound"
     status: str
@@ -270,6 +283,8 @@ class OptimizeResponse(BaseModel):
     solve_seconds: float
     vehicles: list[VehicleResult]
     notices: list[str] = Field(default_factory=list)
+    # 물리적으로 태울 방법이 없어 빠진 어르신. 비어 있으면 전원 배차됐다는 뜻이다.
+    unassigned_passengers: list[UnassignedPassenger] = Field(default_factory=list)
 
 
 class RideCompletionCreate(BaseModel):

@@ -592,7 +592,7 @@ function AdminApp() {
           </Pressable>
         </View>
 
-        <SummaryBar vehicles={vehicles} passengers={passengers} />
+        <SummaryBar vehicles={vehicles} passengers={passengers} tripType={tripType} />
 
         <View style={styles.tabs}>
           <Pressable style={[styles.tab, screen === 'vehicles' && styles.activeTab]} onPress={() => setScreen('vehicles')}>

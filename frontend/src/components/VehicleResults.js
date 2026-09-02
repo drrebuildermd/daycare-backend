@@ -114,8 +114,30 @@ export default function VehicleResults({
   const shownVehicles = (result.vehicles || []).filter(
     (vehicle) => !focusVehicleId || vehicle.vehicle_id === focusVehicleId,
   );
+  const unassigned = result.unassigned_passengers || [];
+
   return (
     <View>
+      {/* 물리적으로 태울 방법이 없어 빠진 분이 있으면 가장 먼저 알린다.
+          결과를 그대로 전송하면 이분들은 아무 차에도 없다. */}
+      {unassigned.length > 0 && (
+        <View style={styles.dropCard}>
+          <View style={styles.dropHead}>
+            <Icon name="warning" size={18} tint="#9B2C2C" />
+            <Text style={styles.dropTitle}>
+              {unassigned.length}명의 배차가 누락되었습니다
+            </Text>
+          </View>
+          <Text style={styles.dropNames}>
+            {unassigned.map((item) => item.name).join(', ')}
+          </Text>
+          <Text style={styles.dropHelp}>
+            해당 어르신의 시간 범위를 넓히거나, 투입 차량(또는 회차)을 추가한 뒤
+            다시 계산해 보세요.
+          </Text>
+        </View>
+      )}
+
       <View style={styles.summary}>
         <Text style={styles.summaryEyebrow}>배차 완료</Text>
         <Text style={styles.summaryTitle}>{result.total_passengers || 0}명 · 총 {(result.total_distance_km || 0).toFixed(1)} km</Text>
@@ -204,6 +226,13 @@ export default function VehicleResults({
 }
 
 const styles = StyleSheet.create({
+  // 놓치면 안 되는 경고다. 결과 카드보다 먼저, 더 눈에 띄게 둔다.
+  dropCard: { backgroundColor: '#FCEDED', borderWidth: 1, borderColor: '#D64545',
+    borderRadius: 12, padding: 16, marginBottom: 16 },
+  dropHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  dropTitle: { flex: 1, minWidth: 0, color: '#9B2C2C', fontSize: 15, fontWeight: '700' },
+  dropNames: { color: '#0D2540', fontSize: 14, fontWeight: '600', marginTop: 10, lineHeight: 21 },
+  dropHelp: { color: '#667085', fontSize: 13, lineHeight: 20, marginTop: 8 },
   summary: { backgroundColor: '#FFFFFF', borderRadius: 12, borderWidth: 1, borderColor: '#E4E7EC',
     borderLeftWidth: 4, borderLeftColor: '#0BA38E', padding: 18, marginBottom: 16 },
   // flexWrap이 분할/적층을 자동으로 결정한다. 폭이 flexBasis 합보다 좁으면 줄바꿈된다.

@@ -87,16 +87,29 @@ check("자차 1회차는 자택에서 출발", first.origin_name == "기사님 �
 
 
 print()
-print("=== 3. 하원 자차: 1회차는 센터 복귀, 2회차는 자택에서 끝난다 ===")
+print("=== 3. 하원 자차: 마지막으로 도는 회차가 자택에서 끝난다 ===")
 
+# 3명을 7석 차에 태우면 한 회차로 끝난다. 그 회차가 마지막 회차다.
 result = build("outbound")
 check("trip_type 이 응답에 실림", result.trip_type == "outbound", result.trip_type)
 trips = {t.round: t for t in result.vehicles[0].trips}
+check("한 회차만 씀", [r for r, t in trips.items() if t.used] == [1],
+      [r for r, t in trips.items() if t.used])
 check("1회차 출발은 센터", trips[1].origin_name == "행복센터", trips[1].origin_name)
-check("1회차 도착은 센터", trips[1].destination_name == "행복센터", trips[1].destination_name)
-check("2회차 출발은 센터", trips[2].origin_name == "행복센터", trips[2].origin_name)
-check("2회차 도착은 기사님 자택", trips[2].destination_name == "기사님 자택",
-      trips[2].destination_name)
+check("1회차가 마지막이므로 자택에서 끝남",
+      trips[1].destination_name == "기사님 자택", trips[1].destination_name)
+check("쓰지 않은 2회차는 자택으로 가지 않음",
+      trips[2].destination_name == "행복센터", trips[2].destination_name)
+
+# 정원을 줄여 두 회차가 필요해지면, 이번엔 2회차가 마지막이다.
+result = build("outbound", capacity=2)
+trips = {t.round: t for t in result.vehicles[0].trips}
+check("두 회차 모두 씀", trips[1].used and trips[2].used,
+      [r for r, t in trips.items() if t.used])
+check("1회차는 센터로 복귀", trips[1].destination_name == "행복센터",
+      trips[1].destination_name)
+check("2회차가 마지막이므로 자택에서 끝남",
+      trips[2].destination_name == "기사님 자택", trips[2].destination_name)
 
 
 print()

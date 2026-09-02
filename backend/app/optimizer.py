@@ -9,6 +9,7 @@ from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 from .config import Settings
 from .geocoding import ResolvedLocation
 from .models import (
+    UnassignedPassenger,
     CenterResult,
     OptimizeRequest,
     OptimizeResponse,
@@ -171,6 +172,96 @@ def trip_endpoints(home_node: int, round_number: int, trip_type: str) -> tuple[i
     return (home_node if round_number == 1 else 0), 0
 
 
+def _reroute_to_end(
+    stops: list[StopResult],
+    node_of: dict[str, int],
+    start_node: int,
+    end_node: int,
+    distance_m,
+    travel_minutes,
+    service: list[int],
+    windows: dict[str, tuple[int, int]],
+    settings: Settings,
+) -> tuple[list[StopResult], int, int, int] | None:
+    """같은 어르신들을 같은 차로, 다른 곳에서 끝나도록 다시 순서를 짠다.
+
+    하원 자차가 한 회차만 돌 때 쓴다. 본 계산은 그 회차가 센터로 돌아온다고 보고
+    순서를 정했는데, 실제로는 기사님이 마지막 어르신을 내려드리고 차고지로 퇴근한다.
+    끝나는 곳이 달라지면 좋은 순서도 달라진다.
+
+    어르신 몇 분짜리 작은 문제라 금방 풀린다. 풀리지 않으면 None 을 돌려주고
+    부르는 쪽이 원래 순서를 그대로 쓴다.
+
+    돌려주는 것: (다시 짠 정류장, 이동거리m, 출발시각분, 도착시각분)
+    """
+    if not stops:
+        return None
+
+    nodes = [start_node] + [node_of[s.passenger_id] for s in stops] + [end_node]
+    local = {original: position for position, original in enumerate(nodes)}
+    size = len(nodes)
+
+    manager = pywrapcp.RoutingIndexManager(size, 1, [0], [size - 1])
+    routing = pywrapcp.RoutingModel(manager)
+
+    def distance(from_index, to_index):
+        return distance_m[nodes[manager.IndexToNode(from_index)]][
+            nodes[manager.IndexToNode(to_index)]
+        ]
+
+    routing.SetArcCostEvaluatorOfAllVehicles(
+        routing.RegisterTransitCallback(distance)
+    )
+
+    def elapsed(from_index, to_index):
+        a = nodes[manager.IndexToNode(from_index)]
+        b = nodes[manager.IndexToNode(to_index)]
+        return service[a] + travel_minutes[a][b]
+
+    routing.AddDimension(
+        routing.RegisterTransitCallback(elapsed), 24 * 60, 24 * 60, False, "Time"
+    )
+    time_dimension = routing.GetDimensionOrDie("Time")
+    for stop in stops:
+        low, high = windows[stop.passenger_id]
+        time_dimension.CumulVar(
+            manager.NodeToIndex(local[node_of[stop.passenger_id]])
+        ).SetRange(low, high)
+    time_dimension.CumulVar(routing.Start(0)).SetRange(0, 24 * 60)
+    time_dimension.CumulVar(routing.End(0)).SetRange(0, 24 * 60)
+    routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(routing.Start(0)))
+
+    search = pywrapcp.DefaultRoutingSearchParameters()
+    search.first_solution_strategy = (
+        routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
+    )
+    search.time_limit.FromSeconds(2)
+    solution = routing.SolveWithParameters(search)
+    if solution is None:
+        return None
+
+    by_node = {node_of[s.passenger_id]: s for s in stops}
+    ordered: list[StopResult] = []
+    travelled = 0
+    index = routing.Start(0)
+    departure = solution.Value(time_dimension.CumulVar(index))
+    while not routing.IsEnd(index):
+        next_index = solution.Value(routing.NextVar(index))
+        travelled += distance(index, next_index)
+        node = nodes[manager.IndexToNode(next_index)]
+        if node in by_node:
+            stop = by_node[node]
+            ordered.append(stop.model_copy(update={
+                "sequence": len(ordered) + 1,
+                "estimated_pickup": format_hhmm(
+                    solution.Value(time_dimension.CumulVar(next_index))
+                ),
+            }))
+        index = next_index
+    arrival = solution.Value(time_dimension.CumulVar(index))
+    return ordered, travelled, departure, arrival
+
+
 def optimize_routes(
     request: OptimizeRequest,
     resolved: list[ResolvedLocation],
@@ -221,12 +312,6 @@ def optimize_routes(
         max(vehicle.capacity for vehicle in vehicles),
     )
 
-    max_capacity = sum(vehicle.capacity for vehicle in vehicles) * 2
-    if passenger_count > max_capacity:
-        raise HTTPException(
-            status_code=422,
-            detail=f"탑승 인원 {passenger_count}명은 2회 운행 최대 수용 인원 {max_capacity}명을 초과합니다.",
-        )
 
     # 노드 0은 센터, 1..n은 어르신, 그 뒤는 자차 출발지.
     # 물리 차량 한 대당 두 개의 라우팅 차량(1·2회차)을 만들고,
@@ -235,6 +320,8 @@ def optimize_routes(
         return 1 <= node <= passenger_count
 
     distance_m, travel_minutes = _matrices(resolved, settings)
+
+    # 물리 차량 한 대당 라우팅 차량 두 개(1·2회차)를 만든다.
     trip_specs = [(vehicle, round_number) for vehicle in vehicles for round_number in (1, 2)]
 
     endpoints = [
@@ -269,12 +356,13 @@ def optimize_routes(
     time_dimension = routing.GetDimensionOrDie("Time")
     time_dimension.SetGlobalSpanCostCoefficient(2)
 
+    passenger_windows: dict[str, tuple[int, int]] = {}
     for node, passenger in enumerate(request.passengers, start=1):
         index = manager.NodeToIndex(node)
         window_start, window_end = passenger.window(trip_type, stay_minutes)
-        time_dimension.CumulVar(index).SetRange(
-            parse_hhmm(window_start), parse_hhmm(window_end)
-        )
+        low, high = parse_hhmm(window_start), parse_hhmm(window_end)
+        passenger_windows[passenger_ids[node - 1]] = (low, high)
+        time_dimension.CumulVar(index).SetRange(low, high)
 
     for trip_index in range(len(trip_specs)):
         start_index = routing.Start(trip_index)
@@ -283,7 +371,7 @@ def optimize_routes(
         time_dimension.CumulVar(end_index).SetRange(0, 24 * 60)
         routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(start_index))
         routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(end_index))
-        # A second run costs extra, helping the solver avoid unnecessary runs.
+        # 두 번째 회차는 값을 더 매겨 꼭 필요할 때만 쓰게 한다.
         routing.SetFixedCostOfVehicle(0 if trip_index % 2 == 0 else 20_000, trip_index)
         # 출발지와 도착지가 다른 회차는, 어르신을 태우지 않아도 그 거리를 실제로 달린다.
         # 자차 하원 2회차가 그렇다. 이 비용을 세지 않으면 솔버는 그 이동을 공짜로 보고
@@ -307,15 +395,17 @@ def optimize_routes(
     )
 
     solver = routing.solver()
+
+    # 물리 차량마다 자기 변형들이 어디에 있는지 찾아 둔다.
     for vehicle_index in range(len(vehicles)):
         first_trip = vehicle_index * 2
         second_trip = first_trip + 1
-        # Never label a run as round 2 unless round 1 is actually used.
+        # 1회차를 쓰지 않으면서 2회차만 쓰는 일은 없다.
         solver.Add(
             routing.ActiveVehicleVar(second_trip)
             <= routing.ActiveVehicleVar(first_trip)
         )
-        # The physical vehicle must return before its second departure.
+        # 물리 차량은 한 대뿐이다. 1회차가 돌아와야 2회차가 나간다.
         solver.Add(
             time_dimension.CumulVar(routing.Start(second_trip))
             >= time_dimension.CumulVar(routing.End(first_trip))
@@ -326,15 +416,28 @@ def optimize_routes(
     # 같으면 같은 차에 같은 회차로 함께 탄다는 뜻이다.
     # 회차가 다르면 차 안에서 마주치지 않으므로 '동승'으로 보지 않는다.
     for left, right in forbidden_pairs:
+        left_index = manager.NodeToIndex(node_of_passenger[left])
+        right_index = manager.NodeToIndex(node_of_passenger[right])
+        different = solver.IsDifferentVar(
+            routing.VehicleVar(left_index), routing.VehicleVar(right_index)
+        )
+        # 두 분이 모두 배차된 경우에만 '다른 차' 를 따진다.
+        # 한 분이라도 빠졌으면 마주칠 일이 없다.
         solver.Add(
-            routing.VehicleVar(manager.NodeToIndex(node_of_passenger[left]))
-            != routing.VehicleVar(manager.NodeToIndex(node_of_passenger[right]))
+            routing.ActiveVar(left_index) * routing.ActiveVar(right_index) <= different
         )
     for left, right in required_pairs:
         solver.Add(
             routing.VehicleVar(manager.NodeToIndex(node_of_passenger[left]))
             == routing.VehicleVar(manager.NodeToIndex(node_of_passenger[right]))
         )
+
+    # 정원이나 시간이 도저히 안 맞으면 전체를 포기하는 대신 그 어르신만 빼고 푼다.
+    # 예전에는 422 를 던져서 원장님이 무엇을 고쳐야 할지 알 수 없었다.
+    # 벌점은 어떤 경로 비용보다도 크게 둔다. 뺄 수 있으면 빼는 쪽이 싸 보이면 안 된다.
+    DROP_PENALTY = 10_000_000
+    for node in range(1, passenger_count + 1):
+        routing.AddDisjunction([manager.NodeToIndex(node)], DROP_PENALTY)
 
     search = pywrapcp.DefaultRoutingSearchParameters()
     search.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PARALLEL_CHEAPEST_INSERTION
@@ -355,6 +458,19 @@ def optimize_routes(
 
     vehicle_results: list[VehicleResult] = []
     total_distance = 0
+    assigned_nodes: set[int] = set()
+
+    def route_of(trip_index: int) -> list[int]:
+        """그 운행이 실제로 들른 어르신 노드."""
+        nodes = []
+        index = routing.Start(trip_index)
+        while not routing.IsEnd(index):
+            index = solution.Value(routing.NextVar(index))
+            node = manager.IndexToNode(index)
+            if is_passenger_node(node):
+                nodes.append(node)
+        return nodes
+
     for physical_index, vehicle in enumerate(vehicles):
         trips: list[TripResult] = []
         for offset, round_number in enumerate((1, 2)):
@@ -407,6 +523,7 @@ def optimize_routes(
                             kakao_navi_url=_kakao_navi_url(location),
                         )
                     )
+            assigned_nodes.update(route_nodes)
             total_distance += route_distance
             start_node, end_node = endpoints[trip_index]
             origin, destination = resolved[start_node], resolved[end_node]
@@ -428,6 +545,49 @@ def optimize_routes(
                     stops=stops,
                 )
             )
+        # 하원 자차가 한 회차만 돌았다면, 그 회차가 마지막 회차다.
+        # 기사님은 센터로 돌아가는 것이 아니라 차고지로 퇴근한다.
+        #
+        # 본 계산에서 도착지를 미리 못 박을 수 없어서(몇 회차가 마지막인지는
+        # 풀어봐야 안다) 2회차를 차고지로 두고 풀었다. 여기서 실제 결과를 보고
+        # 옮긴다. 끝나는 곳이 달라지면 좋은 순서도 달라지므로 순서도 다시 짠다.
+        if (
+            trip_type == "outbound"
+            and vehicle.start_node != 0
+            and trips[0].used
+            and not trips[1].used
+        ):
+            repaired = _reroute_to_end(
+                trips[0].stops, node_of_passenger, 0, vehicle.start_node,
+                distance_m, travel_minutes, service, passenger_windows, settings,
+            )
+            garage = resolved[vehicle.start_node]
+            if repaired:
+                ordered, travelled, departure, arrival = repaired
+                total_distance += travelled - round(trips[0].distance_km * 1000)
+                trips[0] = trips[0].model_copy(update={
+                    "stops": ordered,
+                    "distance_km": round(travelled / 1000, 1),
+                    "departure_time": format_hhmm(departure),
+                    "return_time": format_hhmm(arrival),
+                    "destination_name": garage.name,
+                    "destination_latitude": garage.latitude,
+                    "destination_longitude": garage.longitude,
+                })
+            else:
+                # 다시 짜는 데 실패해도 도착지는 사실대로 적는다.
+                trips[0] = trips[0].model_copy(update={
+                    "destination_name": garage.name,
+                    "destination_latitude": garage.latitude,
+                    "destination_longitude": garage.longitude,
+                })
+            # 쓰지 않은 2회차가 '센터 → 차고지' 로 남으면 두 번 퇴근하는 것처럼 보인다.
+            trips[1] = trips[1].model_copy(update={
+                "destination_name": resolved[0].name,
+                "destination_latitude": resolved[0].latitude,
+                "destination_longitude": resolved[0].longitude,
+            })
+
         # start_node 0 은 센터다. 이때 start_name 은 센터 등록 시 입력한
         # 센터명(예: 수주간보호센터)이 그대로 들어간다. 기사님 화면에서
         # 긴 주소 대신 센터명을 보여줄 수 있어야 한다.
@@ -450,6 +610,50 @@ def optimize_routes(
         )
 
     center_location = resolved[0]
+
+    notices = [
+        "모든 예상 시각은 요청 시간창 안에 있으며 차량별 운행은 최대 2회입니다.",
+    ]
+    self_drive = [v.plate_number for v in vehicles if v.start_node != 0]
+    if self_drive:
+        plates = ", ".join(self_drive)
+        if trip_type == "outbound":
+            notices.append(
+                f"자차 송영 차량({plates})은 센터에서 출발하고 마지막 회차를 마치면"
+                " 기사님 자택(차고지)으로 퇴근합니다."
+            )
+        else:
+            notices.append(
+                f"자차 송영 차량({plates})은 1회차를 지정된 출발지에서 시작하고"
+                " 센터로 복귀합니다."
+            )
+    notices.append(
+        "MVP의 이동시간은 직선거리×도로계수와 평균속도로 산정됩니다."
+        " 운영 전 실시간 도로 시간행렬 연동을 권장합니다."
+    )
+
+    # 배차에 못 넣은 어르신을 모은다.
+    # 전체를 실패로 돌리는 대신 여기에 담아 보내면, 원장님이 무엇을 고쳐야
+    # 하는지 알 수 있고 나머지 배차는 그대로 쓸 수 있다.
+    unassigned = [
+        UnassignedPassenger(
+            passenger_id=passenger_ids[node - 1],
+            name=request.passengers[node - 1].name,
+            requested_window="{}~{}".format(
+                *request.passengers[node - 1].window(trip_type, stay_minutes)
+            ),
+        )
+        for node in range(1, passenger_count + 1)
+        if node not in assigned_nodes
+    ]
+    if unassigned:
+        dropped = ", ".join(item.name for item in unassigned)
+        notices.insert(
+            0,
+            f"{len(unassigned)}명을 배차하지 못했습니다: {dropped}."
+            " 시간 범위를 넓히거나 차량(또는 회차)을 늘린 뒤 다시 계산해 주세요.",
+        )
+
     return OptimizeResponse(
         trip_type=trip_type,
         status="optimal_or_feasible",
@@ -463,19 +667,6 @@ def optimize_routes(
         total_distance_km=round(total_distance / 1000, 1),
         solve_seconds=round(time.perf_counter() - started, 3),
         vehicles=vehicle_results,
-        notices=[
-            "모든 픽업 예상 시각은 요청 시간창 안에 있으며 차량별 운행은 최대 2회입니다.",
-            *(
-                [
-                    "자차 송영 차량("
-                    + ", ".join(
-                        v.plate_number for v in vehicles if v.start_node != 0
-                    )
-                    + ")은 1회차를 지정된 출발지에서 시작하고 센터로 복귀합니다."
-                ]
-                if any(v.start_node != 0 for v in vehicles)
-                else []
-            ),
-            "MVP의 이동시간은 직선거리×도로계수와 평균속도로 산정됩니다. 운영 전 실시간 도로 시간행렬 연동을 권장합니다.",
-        ],
+        notices=notices,
+        unassigned_passengers=unassigned,
     )
