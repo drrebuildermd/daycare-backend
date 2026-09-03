@@ -32,6 +32,8 @@ class VehicleSpec:
     capacity: int
     # 휠체어 고정석 수. 0 이면 리프트 없는 차량이다.
     wheelchair_capacity: int = 0
+    # 하원 운행 마감 시각(분). None 이면 제약 없음.
+    deadline_minutes: int | None = None
     # 1회차 출발 노드. 0 이면 센터, 그 외는 자차 출발지 노드.
     start_node: int = 0
 
@@ -175,6 +177,20 @@ ENGINE_VERSION = "CARE_ENGINE_V2.1"
 # 이 값을 올려야 예전 기록과 나란히 놓고 비교할 수 있다.
 CONSTRAINT_VERSION = "CARE_CONSTRAINT_V3.1"
 OBJECTIVE_VERSION = "CARE_OBJECTIVE_V2.1"
+
+
+def deadline_of(vehicle, settings: Settings) -> int | None:
+    """이 차량의 하원 마감 시각(분).
+
+    차량에 적힌 값이 우선이고, 없으면 센터 공통값을 쓴다.
+    """
+    raw = (vehicle.outbound_deadline or "").strip() or settings.outbound_deadline
+    if not raw:
+        return None
+    try:
+        return parse_hhmm(raw)
+    except Exception:  # noqa: BLE001 - 잘못 적힌 마감이 배차를 막으면 안 된다
+        return None
 
 
 def trip_endpoints(
@@ -329,6 +345,7 @@ def optimize_routes(
                 driver_phone=vehicle.driver_phone,
                 capacity=vehicle.capacity,
                 wheelchair_capacity=vehicle.wheelchair_capacity,
+                deadline_minutes=deadline_of(vehicle, settings),
                 start_node=start_node,
             )
         )
@@ -484,6 +501,42 @@ def optimize_routes(
                 >= time_dimension.CumulVar(routing.End(previous_trip))
                 + settings.turnaround_minutes
             )
+
+    # 하원 마감. 이 시각까지 운행이 끝나야 한다.
+    #
+    # 이 제약이 없으면 솔버가 3회차를 저녁까지 늘어뜨린다. 그러면 조기
+    # 하원이 일어나지 않고, '3회차의 비용' 이라는 것도 생기지 않는다.
+    #
+    # 두 가지를 다르게 본다.
+    #   센터 차량 — 마지막 어르신을 내려드리고 센터로 돌아오는 시각
+    #   자차     — 마지막 어르신을 내려드리는 시각 (차고지 퇴근은 안 센다)
+    #
+    # 쓰지 않는 회차까지 묶으면 안 된다. 회차는 시간 순으로 이어져 있어서,
+    # 앞 회차가 마감에 걸치면 뒤의 빈 회차는 마감을 넘길 수밖에 없다.
+    # 그래서 '그 회차를 실제로 쓸 때만' 지키도록 건다.
+    if trip_type == "outbound":
+        for trip_index, (spec, _round) in enumerate(trip_specs):
+            deadline = spec.deadline_minutes
+            if deadline is None:
+                continue
+            active = routing.ActiveVehicleVar(trip_index)
+            if spec.start_node == 0:
+                in_time = solver.IsLessOrEqualCstVar(
+                    time_dimension.CumulVar(routing.End(trip_index)), deadline
+                )
+                solver.Add(active <= in_time)
+            else:
+                # 자차는 끝점이 차고지라 도착 시각에 퇴근길이 섞인다.
+                # 어르신을 내려드리는 시각 자체를 본다.
+                for node in range(1, passenger_count + 1):
+                    node_index = manager.NodeToIndex(node)
+                    on_this_trip = solver.IsEqualCstVar(
+                        routing.VehicleVar(node_index), trip_index
+                    )
+                    dropped_in_time = solver.IsLessOrEqualCstVar(
+                        time_dimension.CumulVar(node_index), deadline
+                    )
+                    solver.Add(on_this_trip <= dropped_in_time)
 
     # 동승 규칙. VehicleVar는 '어느 운행(차량×회차)에 실렸는가'를 가리키므로,
     # 같으면 같은 차에 같은 회차로 함께 탄다는 뜻이다.

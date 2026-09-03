@@ -132,12 +132,22 @@ class VehicleInput(BaseModel):
     # 고정하기도 해서, 한 숫자로 뭉뚱그리면 어느 쪽도 맞지 않는다.
     # 0 이면 리프트 없는 차량이고 휠체어 어르신이 배정되지 않는다.
     wheelchair_capacity: int = Field(default=0, ge=0, le=100)
+    # 이 차량만의 하원 마감 시각. 비워 두면 센터 공통값을 쓴다.
+    # 자차 기사님은 센터로 돌아오지 않으므로 조금 늦게 잡기도 한다.
+    outbound_deadline: str | None = None
     # 자차 송영: 기사님이 센터가 아니라 자택 등에서 출발하는 경우.
     # 'center' 면 센터에서, 'custom' 이면 start_address 에서 출발한다.
     start_type: Literal["center", "custom"] = "center"
     start_address: str | None = Field(default=None, max_length=200)
     start_latitude: Latitude | None = None
     start_longitude: Longitude | None = None
+
+    @field_validator("outbound_deadline")
+    @classmethod
+    def validate_deadline(cls, value: str | None) -> str | None:
+        if value:
+            parse_hhmm(value)
+        return value
 
     @model_validator(mode="after")
     def wheelchair_seats_fit(self):
