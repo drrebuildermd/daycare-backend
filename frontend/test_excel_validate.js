@@ -17,7 +17,7 @@ const code = babel.transformSync(fs.readFileSync('src/excelValidate.js', 'utf8')
 }).code;
 const mod = { exports: {} };
 new Function('require', 'module', 'exports', code)(require, mod, mod.exports);
-const { checkRow } = mod.exports;
+const { checkRow, isAddressPrecise } = mod.exports;
 
 const failures = [];
 const check = (label, ok, detail) => {
@@ -117,6 +117,54 @@ check('문제가 정확히 4건 잡힌다', all.length === 4, JSON.stringify(all
 check('정상인 두 줄은 걸리지 않는다',
   !all.some((m) => m.includes('김정상') || m.includes('이정상')), JSON.stringify(all));
 for (const message of all) console.log('   ·', message);
+
+console.log('');
+console.log('=== 8. 주소 정밀도 — 통과해야 하는 것 ===');
+console.log('   현장에 실제로 있는 주소 모양이다. 하나라도 막히면 명단을 못 올린다.');
+const GOOD = [
+  '창원시 의창구 중앙대로 100',
+  '창원시 성산구 원이대로 200',
+  '경남 창원시 의창구 용호동 123-4',
+  '창원시 의창구 북면 신촌리 100-2',
+  '서울특별시 강남구 테헤란로 152',
+  '경기도 성남시 분당구 판교역로 235',
+  '제주특별자치도 제주시 첨단로 242',
+  '세종특별자치시 한누리대로 2130',
+  '부산 해운대구 우동 1500',
+  '서울 중구 을지로1가 100',
+  '창원시 의창구 팔용동 우림아파트 101동 502호',
+  '창원시 의창구 중앙대로100',
+  '인천 연수구 송도과학로 32',
+];
+for (const address of GOOD) {
+  check(`통과: ${address}`, isAddressPrecise(address));
+}
+
+console.log('');
+console.log('=== 9. 주소 정밀도 — 막아야 하는 것 ===');
+const BAD = [
+  ['창원시', '시 이름만'],
+  ['창원시 의창구', '구까지만'],
+  ['경남 창원시 의창구', '구까지만'],
+  ['창원시 의창구 용호동', '동까지만 (번지 없음)'],
+  ['창원광장', '건물명만'],
+  ['', '빈 값'],
+  ['   ', '공백만'],
+];
+for (const [address, why] of BAD) {
+  check(`차단: "${address}" (${why})`, !isAddressPrecise(address));
+}
+
+console.log('');
+console.log('=== 10. 포괄 주소 문구 ===');
+const vague = checkRow(row({ name: '이대충', address: '창원시' }), 3);
+check('한 건 잡힌다', vague.length === 1, JSON.stringify(vague));
+check('줄 번호와 이름이 들어간다',
+  vague[0].includes('3번째 줄') && vague[0].includes('이대충'), vague[0]);
+check('무엇을 넣어야 하는지 말한다',
+  vague[0].includes('동/로/길') && vague[0].includes('번지'), vague[0]);
+check('입력한 값을 되보여 준다', vague[0].includes('창원시'), vague[0]);
+console.log('   문구:', vague[0]);
 
 console.log('');
 if (failures.length) {

@@ -16,7 +16,10 @@ const COLUMN_ALIASES = {
   dropoffStart: ['dropoff_start', '하차 하한', '하원 하한', '하차시간 하한'],
   dropoffEnd: ['dropoff_end', '하차 상한', '하원 상한', '하차시간 상한'],
   wheelchair: ['wheelchair', '휠체어', '휠체어 여부'],
-  guardianPhone: ['guardian_phone', '보호자 연락처', '보호자연락처', '연락처', '전화번호', '휴대폰'], // 🚨 [신규 장착] 엑셀에서 연락처 열 추출
+  guardianPhone: ['guardian_phone', '보호자 연락처', '보호자연락처', '연락처', '전화번호', '휴대폰'],
+  // 어르신 본인 휴대폰. 대표 연락처를 '본인' 으로 두면 기사님이 여기로 건다.
+  passengerPhone: ['passenger_phone', '어르신 전화번호', '어르신 연락처',
+    '본인 연락처', '본인연락처', '어르신휴대폰'],
   latitude: ['latitude', 'lat', '위도'],
   longitude: ['longitude', 'lng', 'lon', '경도'],
 };
@@ -48,7 +51,7 @@ const asBoolean = (value) => ['true', 'y', 'yes', '1', '예', '유', 'o'].includ
 // 채워진 예시 한 줄과 함께 내려준다. 그 줄을 지우고 쓰시면 된다.
 
 const TEMPLATE_HEADERS = [
-  '이름', '주소', '상세주소', '보호자 연락처',
+  '이름', '주소', '상세주소', '보호자 연락처', '어르신 전화번호',
   '픽업 하한', '픽업 상한', '하차 하한', '하차 상한', '휠체어',
 ];
 
@@ -58,6 +61,7 @@ const TEMPLATE_SAMPLE = [
     주소: '창원시 의창구 중앙대로 100',
     상세주소: '101동 1502호',
     '보호자 연락처': '010-1234-5678',
+    '어르신 전화번호': '010-9876-5432',
     '픽업 하한': '08:00',
     '픽업 상한': '08:30',
     '하차 하한': '',
@@ -69,6 +73,7 @@ const TEMPLATE_SAMPLE = [
     주소: '창원시 성산구 원이대로 200',
     상세주소: '',
     '보호자 연락처': '010-2345-6789',
+    '어르신 전화번호': '',
     '픽업 하한': '08:20',
     '픽업 상한': '09:00',
     '하차 하한': '16:00',
@@ -82,7 +87,7 @@ export async function downloadPassengerTemplate() {
 
   // 열 너비를 미리 잡아 준다. 기본값이면 주소가 다 가려서 뭘 넣는 칸인지 모른다.
   sheet['!cols'] = [
-    { wch: 10 }, { wch: 32 }, { wch: 14 }, { wch: 16 },
+    { wch: 10 }, { wch: 32 }, { wch: 14 }, { wch: 16 }, { wch: 16 },
     { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 8 },
   ];
 
@@ -155,6 +160,7 @@ export async function pickPassengerExcel() {
       dropoffEnd: excelTime(getValue(row, COLUMN_ALIASES.dropoffEnd)),
       wheelchair: asBoolean(getValue(row, COLUMN_ALIASES.wheelchair)),
       guardianPhone: String(getValue(row, COLUMN_ALIASES.guardianPhone) ?? '').trim(),
+      passengerPhone: String(getValue(row, COLUMN_ALIASES.passengerPhone) ?? '').trim(),
       latitude: String(getValue(row, COLUMN_ALIASES.latitude) ?? '').trim(),
       longitude: String(getValue(row, COLUMN_ALIASES.longitude) ?? '').trim(),
     }))

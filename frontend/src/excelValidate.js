@@ -9,6 +9,27 @@
  */
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
+// 주소가 좌표를 찍을 만큼 자세한가.
+//
+// "창원시" 만 적어도 지오코딩은 성공한다. 시청 좌표가 나온다. 그러면 그
+// 어르신은 시청에서 태우는 것으로 동선이 짜이고, 기사님이 현장에서야 알게 된다.
+// 실패로 알려주지 않는 종류의 실수라 여기서 막는다.
+//
+// 두 가지를 본다.
+//   1) 동·읍·면·리·로·길·가 로 끝나는 단어가 있는가 (행정동 또는 도로명)
+//   2) 번지나 건물번호에 해당하는 숫자가 있는가
+//
+// 단어 '끝' 을 보는 이유는 '리버파크' 의 리, '가로수길' 의 가 같은 것에
+// 걸리지 않기 위해서다. 뒤에 숫자가 붙는 경우(중앙대로100)도 받아 준다.
+const ADDRESS_UNIT = /[가-힣]+(?:동|읍|면|리|로|길|가)(?=\s|\d|$|[,·])/;
+const ADDRESS_NUMBER = /\d/;
+
+export function isAddressPrecise(address) {
+  const text = String(address ?? '').trim();
+  if (!text) return false;
+  return ADDRESS_UNIT.test(text) && ADDRESS_NUMBER.test(text);
+}
+
 export function describe(rowNumber, name) {
   // 엑셀 첫 줄은 열 이름이므로 데이터 첫 줄이 2행이다. 원장님이 보시는
   // 번호와 같아야 찾아가실 수 있다.
@@ -20,7 +41,14 @@ export function checkRow(passenger, rowNumber) {
   const who = describe(rowNumber, passenger.name);
 
   if (!passenger.name) problems.push(`${who}의 이름이 비어 있습니다.`);
-  if (!passenger.address) problems.push(`${who}의 주소가 비어 있습니다.`);
+  if (!passenger.address) {
+    problems.push(`${who}의 주소가 비어 있습니다.`);
+  } else if (!isAddressPrecise(passenger.address)) {
+    problems.push(
+      `${who}의 주소가 너무 포괄적입니다 (${passenger.address}). `
+      + '동/로/길 및 번지수까지 정확히 입력해 주세요.',
+    );
+  }
 
   const pairs = [
     ['픽업', passenger.pickupStart, passenger.pickupEnd, true],
