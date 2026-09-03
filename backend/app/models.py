@@ -319,6 +319,69 @@ class UnassignedPassenger(BaseModel):
     wheelchair: bool = False
 
 
+class RecommendationAction(BaseModel):
+    """원장님이 실제로 손볼 수 있는 한 가지 조치."""
+
+    passenger_id: str
+    name: str
+    # 지금 설정된 희망 시각
+    current_window: str
+    # 이렇게 바꾸면 배차된다
+    suggested_window: str
+    delta_minutes: int
+    # 완화한 판에서 실제로 몇 시에 도착하는지. 창을 넓히라고만 하면
+    # 얼마나 넓혀야 하는지 감이 안 온다.
+    scheduled_time: str | None = None
+
+
+class RecommendationOption(BaseModel):
+    """대안 하나. 우선순위가 낮을수록 먼저 시도한 것이다."""
+
+    priority: int
+    # time / rounds / structural
+    kind: Literal["adjust_time", "add_round", "structural"]
+    feasible: bool
+    headline: str
+    detail: str | None = None
+    actions: list[RecommendationAction] = Field(default_factory=list)
+    # 이 대안을 쓰면 몇 분이 더 타실 수 있는지
+    resolves_count: int = 0
+
+
+class RecommendationReport(BaseModel):
+    """배차가 안 된 이유와, 어떻게 하면 되는지.
+
+    '휠체어석이 부족해서 N명 누락' 까지만 말하면 원장님은 그래서 무엇을
+    해야 하는지 알 수 없다. 시간을 조절할지, 회차를 늘릴지, 차를 늘려야
+    하는지까지 답해야 쓸모가 있다.
+    """
+
+    verdict: Literal[
+        "all_assigned",      # 애초에 빠진 분이 없다
+        "time_relaxable",    # 시간만 조절하면 된다
+        "needs_extra_round", # 회차를 늘리면 된다
+        "structural",        # 차가 모자란다
+    ]
+    unassigned_count: int = 0
+    options: list[RecommendationOption] = Field(default_factory=list)
+    analyzed_seconds: float = 0.0
+    # 어느 계산에 대한 분석인지. 나중에 '제안을 받아들였나' 를 보려면 필요하다.
+    optimization_run_id: str | None = None
+
+
+class RecommendRequest(BaseModel):
+    """대안 분석 요청.
+
+    배차 계산과 같은 입력에, '누가 빠졌는지' 를 함께 받는다. 다시 풀어서
+    찾을 수도 있지만 그러면 화면에 보이는 결과와 다른 답이 나올 수 있다.
+    원장님이 보고 계신 그 결과를 그대로 분석해야 말이 맞는다.
+    """
+
+    request: OptimizeRequest
+    unassigned_passenger_ids: list[str] = Field(default_factory=list)
+    optimization_run_id: str | None = None
+
+
 class OptimizeResponse(BaseModel):
     trip_type: TripType = "inbound"
     status: str

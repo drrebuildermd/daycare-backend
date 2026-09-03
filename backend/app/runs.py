@@ -170,3 +170,23 @@ def record_optimization_run(
     except Exception as error:  # noqa: BLE001 - 기록 실패가 배차를 막으면 안 된다
         logger.warning("최적화 이력 저장 실패 (배차는 정상 진행): %s", error)
         return None
+
+
+def save_recommendation(run_id: str, report) -> bool:
+    """어떤 대안을 제안했는지 그 계산 이력에 붙인다.
+
+    나중에 '원장님이 이 제안을 받아들였나' 를 보려면 제안 자체가 남아 있어야
+    한다. 같은 날 다음 계산에서 그 어르신의 시각이 실제로 바뀌었는지 보면
+    수용 여부를 알 수 있고, 그게 다음 개선의 근거가 된다.
+
+    여기서도 실패는 삼킨다. 이력이 안 남는 것보다 분석 결과를 못 보는 것이
+    더 나쁘다.
+    """
+    try:
+        get_supabase().table(TABLE).update(
+            {"recommendation": report.model_dump(mode="json")}
+        ).eq("id", run_id).execute()
+        return True
+    except Exception as error:  # noqa: BLE001 - 기록 실패가 분석을 막으면 안 된다
+        logger.warning("대안 분석 결과 저장 실패 (분석 결과는 정상 반환): %s", error)
+        return False

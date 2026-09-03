@@ -45,13 +45,16 @@ from app.models import (
     DriverDeviceRecord,
     OptimizeRequest,
     OptimizeResponse,
+    RecommendRequest,
+    RecommendationReport,
     RideCompletionCreate,
     TripType,
     RideCompletionList,
     RideCompletionRecord,
 )
 from app.optimizer import optimize_routes
-from app.runs import record_optimization_run
+from app.recommender import analyze
+from app.runs import record_optimization_run, save_recommendation
 from app.supabase_client import (
     MISSING_MESSAGE,
     PUBLISHABLE_WARNING,
@@ -381,6 +384,67 @@ def read_driver_devices(driver_name: str | None = None) -> DriverDeviceList:
 @app.delete("/api/driver-devices/{expo_push_token}", status_code=204)
 def delete_driver_device(expo_push_token: str) -> None:
     deactivate_device(expo_push_token)
+
+
+@app.post("/api/optimize/recommend", response_model=RecommendationReport)
+async def recommend_resolution(
+    payload: RecommendRequest, settings: Settings = Depends(get_settings)
+) -> RecommendationReport:
+    """배차가 안 된 분들을 어떻게 하면 태울 수 있는지 찾는다.
+
+    배차 계산(/api/optimize)과 일부러 떼어 놓았다. 이 분석은 솔버를 최대 두 번
+    더 돌리므로, 같은 요청에 묶으면 배차가 나오는 시간이 그만큼 늦어진다.
+    원장님이 결과를 보고 궁금할 때만 부르면 된다.
+
+    분석이 실패해도 배차 결과는 이미 원장님 손에 있다.
+    """
+    base = payload.request
+    label = "하원" if base.trip_type == "outbound" else "등원"
+    attending = [p for p in base.passengers if p.is_attending(base.trip_type)]
+    if not attending:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{label} 대상 어르신이 없습니다. 탑승 여부를 확인해 주세요.",
+        )
+
+    # 배차 계산과 같은 규칙으로 규칙을 걷어낸다. 여기서 어긋나면 분석이
+    # 원장님이 보고 있는 결과와 다른 판을 푸는 셈이 된다.
+    riding_ids = {p.id for p in attending if p.id}
+    base = base.model_copy(update={
+        "passengers": attending,
+        "forbidden_pairs": [
+            rule for rule in base.forbidden_pairs
+            if all(pid in riding_ids for pid in rule.pair)
+        ],
+        "required_pairs": [
+            rule for rule in base.required_pairs
+            if all(pid in riding_ids for pid in rule.pair)
+        ],
+    })
+
+    custom_starts = [
+        location
+        for location in (vehicle.as_start_location() for vehicle in base.vehicles)
+        if location is not None
+    ]
+    resolved = await resolve_locations(
+        [base.center, *base.passengers, *custom_starts], settings
+    )
+
+    report = analyze(
+        base,
+        resolved,
+        settings,
+        payload.unassigned_passenger_ids,
+        payload.optimization_run_id,
+    )
+
+    # 무엇을 제안했는지 이력에 붙인다. 나중에 원장님이 이 제안을 받아들였는지
+    # 보려면 제안 자체가 남아 있어야 한다. 실패해도 분석 결과는 그대로 준다.
+    if payload.optimization_run_id:
+        save_recommendation(payload.optimization_run_id, report)
+
+    return report
 
 
 @app.post("/api/dispatch/notify", response_model=DispatchNotifyResult)

@@ -165,6 +165,11 @@ DROP_PENALTY = 10_000_000
 # 전체 운행이 걸리는 시간(분)에 붙는 값. 1분을 2m 로 친다.
 TIME_SPAN_COEFFICIENT = 2
 
+# 차량 한 대가 도는 회차 수. 늘리면 더 많은 분을 태울 수 있지만 기사님이
+# 그만큼 더 운행하신다. 그래서 기본값은 2 이고, 대안 분석기가 '3회차까지
+# 돌면 되는가' 를 물을 때만 올려서 풀어 본다.
+DEFAULT_TRIPS_PER_VEHICLE = 2
+
 ENGINE_VERSION = "CARE_ENGINE_V2.1"
 # v3.1 에서 휠체어 고정석 제약이 추가됐다. 제약이 바뀌면 결과도 바뀌므로
 # 이 값을 올려야 예전 기록과 나란히 놓고 비교할 수 있다.
@@ -172,7 +177,12 @@ CONSTRAINT_VERSION = "CARE_CONSTRAINT_V3.1"
 OBJECTIVE_VERSION = "CARE_OBJECTIVE_V2.1"
 
 
-def trip_endpoints(home_node: int, round_number: int, trip_type: str) -> tuple[int, int]:
+def trip_endpoints(
+    home_node: int,
+    round_number: int,
+    trip_type: str,
+    last_round: int = DEFAULT_TRIPS_PER_VEHICLE,
+) -> tuple[int, int]:
     """이 회차가 어느 노드에서 떠나 어느 노드에서 끝나는지.
 
     home_node 는 자차 출발지 노드다. 센터 차량이면 0(센터)이라 아래 규칙이
@@ -184,16 +194,18 @@ def trip_endpoints(home_node: int, round_number: int, trip_type: str) -> tuple[i
       센터차량     센터 → 센터
 
     하원 — 어르신을 댁에 모셔다드린다. 그래서 늘 센터에서 떠난다.
-      자차 1회차   센터 → 센터      (2회차를 더 돌아야 하니 복귀한다)
-      자차 2회차   센터 → 자택      (마지막 어르신을 내려드리고 퇴근한다)
+      자차 1회차   센터 → 센터      (뒤 회차를 더 돌아야 하니 복귀한다)
+      자차 마지막   센터 → 자택      (마지막 어르신을 내려드리고 퇴근한다)
       센터차량     센터 → 센터
 
     자차 하원에서 2회차를 돌지 않아도 기사님은 결국 집으로 간다. 그 빈 이동도
     거리 비용에 넣어 두면(ConsiderEmptyRouteCostsForVehicle) 솔버가 2회차를
     쓸지 말지를 그 비용까지 견줘서 정한다.
     """
+    # '마지막 회차' 는 회차 수에 따라 달라진다. 3회차까지 도는 판에서는
+    # 2회차가 아니라 3회차가 퇴근길이다.
     if trip_type == "outbound":
-        return 0, (home_node if round_number == 2 else 0)
+        return 0, (home_node if round_number == last_round else 0)
     return (home_node if round_number == 1 else 0), 0
 
 
@@ -291,6 +303,7 @@ def optimize_routes(
     request: OptimizeRequest,
     resolved: list[ResolvedLocation],
     settings: Settings,
+    trips_per_vehicle: int = DEFAULT_TRIPS_PER_VEHICLE,
 ) -> OptimizeResponse:
     started = time.perf_counter()
     trip_type = request.trip_type
@@ -348,10 +361,11 @@ def optimize_routes(
     distance_m, travel_minutes = _matrices(resolved, settings)
 
     # 물리 차량 한 대당 라우팅 차량 두 개(1·2회차)를 만든다.
-    trip_specs = [(vehicle, round_number) for vehicle in vehicles for round_number in (1, 2)]
+    rounds = tuple(range(1, trips_per_vehicle + 1))
+    trip_specs = [(vehicle, round_number) for vehicle in vehicles for round_number in rounds]
 
     endpoints = [
-        trip_endpoints(vehicle.start_node, round_number, trip_type)
+        trip_endpoints(vehicle.start_node, round_number, trip_type, trips_per_vehicle)
         for vehicle, round_number in trip_specs
     ]
     trip_starts = [start for start, _ in endpoints]
@@ -398,8 +412,11 @@ def optimize_routes(
         routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(start_index))
         routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(end_index))
         # 두 번째 회차는 값을 더 매겨 꼭 필요할 때만 쓰게 한다.
+        # 회차를 더 쓸수록 비싸다. 1회차는 공짜, 2회차부터 한 번에 하나씩
+        # 더 붙는다. 회차 수가 2일 때는 예전과 같은 값(0, 20000)이 된다.
+        round_number = trip_specs[trip_index][1]
         routing.SetFixedCostOfVehicle(
-            0 if trip_index % 2 == 0 else SECOND_RUN_PENALTY, trip_index
+            (round_number - 1) * SECOND_RUN_PENALTY, trip_index
         )
         # 출발지와 도착지가 다른 회차는, 어르신을 태우지 않아도 그 거리를 실제로 달린다.
         # 자차 하원 2회차가 그렇다. 이 비용을 세지 않으면 솔버는 그 이동을 공짜로 보고
@@ -449,21 +466,24 @@ def optimize_routes(
 
     solver = routing.solver()
 
-    # 물리 차량마다 자기 변형들이 어디에 있는지 찾아 둔다.
+    # 한 물리 차량의 회차들을 시간 순으로 묶는다.
+    # 회차가 몇 개든 이웃한 두 개씩 이으면 전체가 한 줄로 이어진다.
     for vehicle_index in range(len(vehicles)):
-        first_trip = vehicle_index * 2
-        second_trip = first_trip + 1
-        # 1회차를 쓰지 않으면서 2회차만 쓰는 일은 없다.
-        solver.Add(
-            routing.ActiveVehicleVar(second_trip)
-            <= routing.ActiveVehicleVar(first_trip)
-        )
-        # 물리 차량은 한 대뿐이다. 1회차가 돌아와야 2회차가 나간다.
-        solver.Add(
-            time_dimension.CumulVar(routing.Start(second_trip))
-            >= time_dimension.CumulVar(routing.End(first_trip))
-            + settings.turnaround_minutes
-        )
+        base = vehicle_index * trips_per_vehicle
+        for offset in range(1, trips_per_vehicle):
+            previous_trip = base + offset - 1
+            this_trip = base + offset
+            # 앞 회차를 쓰지 않으면서 뒤 회차만 쓰는 일은 없다.
+            solver.Add(
+                routing.ActiveVehicleVar(this_trip)
+                <= routing.ActiveVehicleVar(previous_trip)
+            )
+            # 물리 차량은 한 대뿐이다. 앞 회차가 돌아와야 다음 회차가 나간다.
+            solver.Add(
+                time_dimension.CumulVar(routing.Start(this_trip))
+                >= time_dimension.CumulVar(routing.End(previous_trip))
+                + settings.turnaround_minutes
+            )
 
     # 동승 규칙. VehicleVar는 '어느 운행(차량×회차)에 실렸는가'를 가리키므로,
     # 같으면 같은 차에 같은 회차로 함께 탄다는 뜻이다.
@@ -525,8 +545,8 @@ def optimize_routes(
 
     for physical_index, vehicle in enumerate(vehicles):
         trips: list[TripResult] = []
-        for offset, round_number in enumerate((1, 2)):
-            trip_index = physical_index * 2 + offset
+        for offset, round_number in enumerate(rounds):
+            trip_index = physical_index * trips_per_vehicle + offset
             route_nodes: list[int] = []
             route_distance = 0
             index = routing.Start(trip_index)
@@ -603,21 +623,26 @@ def optimize_routes(
         # 본 계산에서 도착지를 미리 못 박을 수 없어서(몇 회차가 마지막인지는
         # 풀어봐야 안다) 2회차를 차고지로 두고 풀었다. 여기서 실제 결과를 보고
         # 옮긴다. 끝나는 곳이 달라지면 좋은 순서도 달라지므로 순서도 다시 짠다.
-        if (
+        # 마지막으로 실제 운행한 회차가 퇴근길이다. 몇 번째가 될지는
+        # 풀어봐야 알기에 마지막 회차를 차고지로 두고 풀었고, 여기서 옮긴다.
+        used_indexes = [i for i, trip in enumerate(trips) if trip.used]
+        last_used = used_indexes[-1] if used_indexes else None
+        needs_repair = (
             trip_type == "outbound"
             and vehicle.start_node != 0
-            and trips[0].used
-            and not trips[1].used
-        ):
+            and last_used is not None
+            and last_used != len(trips) - 1
+        )
+        if needs_repair:
             repaired = _reroute_to_end(
-                trips[0].stops, node_of_passenger, 0, vehicle.start_node,
+                trips[last_used].stops, node_of_passenger, 0, vehicle.start_node,
                 distance_m, travel_minutes, service, passenger_windows, settings,
             )
             garage = resolved[vehicle.start_node]
             if repaired:
                 ordered, travelled, departure, arrival = repaired
-                total_distance += travelled - round(trips[0].distance_km * 1000)
-                trips[0] = trips[0].model_copy(update={
+                total_distance += travelled - round(trips[last_used].distance_km * 1000)
+                trips[last_used] = trips[last_used].model_copy(update={
                     "stops": ordered,
                     "distance_km": round(travelled / 1000, 1),
                     "departure_time": format_hhmm(departure),
@@ -628,17 +653,19 @@ def optimize_routes(
                 })
             else:
                 # 다시 짜는 데 실패해도 도착지는 사실대로 적는다.
-                trips[0] = trips[0].model_copy(update={
+                trips[last_used] = trips[last_used].model_copy(update={
                     "destination_name": garage.name,
                     "destination_latitude": garage.latitude,
                     "destination_longitude": garage.longitude,
                 })
-            # 쓰지 않은 2회차가 '센터 → 차고지' 로 남으면 두 번 퇴근하는 것처럼 보인다.
-            trips[1] = trips[1].model_copy(update={
-                "destination_name": resolved[0].name,
-                "destination_latitude": resolved[0].latitude,
-                "destination_longitude": resolved[0].longitude,
-            })
+            # 쓰지 않은 뒤 회차가 '센터 → 차고지' 로 남으면 여러 번 퇴근하는
+            # 것처럼 보인다. 안 쓴 회차는 전부 센터에서 끝나는 것으로 적는다.
+            for idx in range(last_used + 1, len(trips)):
+                trips[idx] = trips[idx].model_copy(update={
+                    "destination_name": resolved[0].name,
+                    "destination_latitude": resolved[0].latitude,
+                    "destination_longitude": resolved[0].longitude,
+                })
 
         # start_node 0 은 센터다. 이때 start_name 은 센터 등록 시 입력한
         # 센터명(예: 수주간보호센터)이 그대로 들어간다. 기사님 화면에서
@@ -664,7 +691,8 @@ def optimize_routes(
     center_location = resolved[0]
 
     notices = [
-        "모든 예상 시각은 요청 시간창 안에 있으며 차량별 운행은 최대 2회입니다.",
+        "모든 예상 시각은 요청 시간창 안에 있으며 차량별 운행은 최대 "
+        f"{trips_per_vehicle}회입니다.",
     ]
     self_drive = [v.plate_number for v in vehicles if v.start_node != 0]
     if self_drive:
@@ -741,7 +769,8 @@ def optimize_routes(
     # 솔버가 무엇을 얼마나 비싸게 봤는지 같은 계수로 다시 계산한다.
     # OR-Tools 는 총합만 주고 항목별로는 나눠주지 않는다.
     used_trips = [t for v in vehicle_results for t in v.trips if t.used]
-    second_runs = sum(1 for t in used_trips if t.round == 2)
+    # 2회차 이상은 모두 추가 회차다. 3회차를 도는 판에서는 두 번 세어야 한다.
+    second_runs = sum(t.round - 1 for t in used_trips if t.round > 1)
     minutes = [
         parse_hhmm(value)
         for t in used_trips
