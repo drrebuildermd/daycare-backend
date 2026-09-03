@@ -3,15 +3,37 @@ export const API_URL = (
   process.env.EXPO_PUBLIC_API_URL || 'http://127.0.0.1:8000'
 ).replace(/\/+$/, '');
 
-const request = async (path, options = {}) => {
+// 응답이 아예 오지 않는 경우를 막는다.
+//
+// try/catch 로는 이걸 못 잡는다. catch 는 요청이 '실패' 해야 도는데,
+// 서버가 답을 안 주면 실패도 성공도 아닌 채로 영원히 매달린다.
+// 그러면 await 뒤의 코드가 통째로 실행되지 않는다.
+//
+// Render 무료 요금제는 15분쯤 놀면 잠든다. 다시 깨는 데 30~60초가
+// 걸리고 그동안 요청이 매달린다. 앱이 어떤 날은 켜지고 어떤 날은
+// 안 켜지던 이유가 이것이었다.
+const DEFAULT_TIMEOUT_MS = 30000;
+
+const request = async (path, options = {}, timeoutMs = DEFAULT_TIMEOUT_MS) => {
   let response;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     response = await fetch(`${API_URL}${path}`, {
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       ...options,
     });
   } catch (error) {
+    if (error && error.name === 'AbortError') {
+      throw new Error(
+        `서버가 ${Math.round(timeoutMs / 1000)}초 안에 응답하지 않았습니다. `
+        + '잠시 후 다시 시도해 주세요.',
+      );
+    }
     throw new Error(`백엔드(${API_URL})에 연결하지 못했습니다. 서버 실행 여부와 주소를 확인해 주세요.`);
+  } finally {
+    clearTimeout(timer);
   }
 
   if (!response.ok) {
@@ -29,7 +51,10 @@ const request = async (path, options = {}) => {
   return response.json();
 };
 
-export const optimizeRoutes = (payload) => request('/api/optimize', { method: 'POST', body: JSON.stringify(payload) });
+// 배차 계산은 솔버가 15초를 쓰고 지오코딩도 붙는다. 서버가 자고 있었다면
+// 깨는 시간까지 더해진다. 짧게 끊으면 정상 계산이 실패로 보인다.
+export const optimizeRoutes = (payload) =>
+  request('/api/optimize', { method: 'POST', body: JSON.stringify(payload) }, 120000);
 
 // 배차가 안 된 분들을 어떻게 하면 태울 수 있는지 묻는다.
 // 배차 계산과 일부러 떼어 둔 API 다. 이쪽은 최대 6초까지 걸리므로
@@ -42,7 +67,7 @@ export const recommendResolution = (payload, unassignedIds, runId) =>
       unassigned_passenger_ids: unassignedIds,
       optimization_run_id: runId || null,
     }),
-  });
+  }, 90000);
 export const saveRideCompletion = (payload) => request('/api/ride-completions', { method: 'POST', body: JSON.stringify(payload) });
 // 등원(inbound)은 어르신을 센터로 모셔오는 운행, 하원(outbound)은 댁으로 모셔다드리는 운행.
 export const TRIP_INBOUND = 'inbound';

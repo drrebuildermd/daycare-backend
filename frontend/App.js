@@ -193,6 +193,24 @@ function AdminApp() {
           if (session.tripType === TRIP_OUTBOUND) setTripType(TRIP_OUTBOUND);
         }
       } catch (_) {}
+
+      // 여기까지는 폰 안에서만 읽는다. 화면을 띄우는 데 필요한 것은
+      // 이게 전부다.
+      //
+      // 예전에는 이 아래 서버 호출 두 개를 먼저 기다린 뒤에 모드를 정했다.
+      // 서버가 자고 있으면 그 await 에서 멈췄고, setMode 가 실행되지 않아
+      // mode 가 null 로 남았다. 스플래시를 내리는 조건이 mode !== null 이라
+      // 앱이 첫 화면에서 영원히 멈췄다. 서버가 깨어 있는 날에는 멀쩡했다.
+      try {
+        const savedMode = await AsyncStorage.getItem(MODE_KEY);
+        setMode(savedMode === 'admin' || savedMode === 'driver' ? savedMode : 'gate');
+      } catch (_) {
+        setMode('gate');
+      }
+      setRestored(true);
+
+      // 서버에서 받아오는 것은 화면을 띄운 뒤에 채운다.
+      // 늦게 와도, 아예 안 와도 앱은 이미 쓸 수 있는 상태다.
       try {
         const today = await fetchTodayCompletions();
         setCompletedStops(Object.fromEntries(
@@ -203,13 +221,6 @@ function AdminApp() {
         const ackList = await fetchTodayAcks();
         setAcks(ackList.records || []);
       } catch (_) {}
-      try {
-        const savedMode = await AsyncStorage.getItem(MODE_KEY);
-        setMode(savedMode === 'admin' || savedMode === 'driver' ? savedMode : 'gate');
-      } catch (_) {
-        setMode('gate');
-      }
-      setRestored(true);
     };
     restoreSession();
   }, []);
@@ -293,6 +304,19 @@ function AdminApp() {
   useEffect(() => {
     if (fontsLoaded && mode !== null) SplashScreen.hideAsync().catch(() => {});
   }, [fontsLoaded, mode]);
+
+  // 마지막 안전망.
+  //
+  // 위 조건이 어떤 이유로든 참이 되지 않으면 원장님은 멈춘 앱을 보게 된다.
+  // 무엇이 잘못됐든 8초 뒤에는 화면을 넘긴다. 모드를 못 읽었으면 선택
+  // 화면으로 보낸다. 잘못된 화면을 보여 주는 편이 아무것도 못 하는 것보다 낫다.
+  useEffect(() => {
+    const rescue = setTimeout(() => {
+      setMode((current) => (current === null ? 'gate' : current));
+      SplashScreen.hideAsync().catch(() => {});
+    }, 8000);
+    return () => clearTimeout(rescue);
+  }, []);
 
   const passengerCount = useMemo(
     () => passengers.filter(
