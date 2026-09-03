@@ -139,9 +139,23 @@ with TestClient(main.app) as client:
               any("미탑승" in n for n in r.json()["notices"]),
               str(r.json()["notices"]))
 
-    print("--- 7. 결석자를 가리키는 규칙은 거절 ---")
+    print("--- 7. 결석자를 가리키는 규칙은 그날만 빼고 계산한다 ---")
+    # 예전에는 422 로 거절했다. 그러면 짝꿍 한 분이 결석한 날에는 배차 계산
+    # 자체가 막히고, 원장님이 내일 다시 쓸 규칙을 지워야 했다.
+    # 결석하신 분과의 동승 규칙은 지킬 것이 없는 규칙이라 그날만 빼면 된다.
     r = client.post("/api/optimize", json=build(
         VEHICLES_2, with_absent, required=[("P001", "P002")]))
+    check("배차는 성공한다", r.status_code == 200, f"HTTP {r.status_code}")
+    if r.status_code == 200:
+        check("규칙을 뺐다고 알려 준다",
+              any("동승 규칙" in n for n in r.json()["notices"]),
+              str([n for n in r.json()["notices"] if "동승" in n]))
+        check("결석자는 여전히 배차에서 빠진다", "P001" not in trip_of(r.json()))
+
+    print("--- 7-1. 명단에 아예 없는 id 는 여전히 거절 ---")
+    # 오타나 지워진 어르신을 가리키는 규칙은 데이터 오류라서 일찍 잡아야 한다.
+    r = client.post("/api/optimize", json=build(
+        VEHICLES_2, with_absent, required=[("P001", "P999")]))
     check("422로 거절", r.status_code == 422, f"HTTP {r.status_code}")
 
     print("--- 8. 전원 결석 ---")

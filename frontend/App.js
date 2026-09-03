@@ -93,6 +93,16 @@ const emptyVehicle = () => ({
   startLongitude: '',
 });
 
+// 등원과 하원은 타는 사람이 다르다. 아침엔 보호자가 모셔다 주고 오후엔
+// 센터 차를 타는 분이 있어서, 어느 쪽을 계산하느냐에 따라 대상자가 달라진다.
+//
+// 이 판단을 화면마다 따로 하면 '대상 34명인데 20명만 배차됨' 같은 일이 생긴다.
+// 실제로 그랬다. 요약 막대는 하원 스위치를 보고, 서버로 보낼 명단은 등원
+// 스위치를 봐서, 하원만 타시는 14분이 요청에 실리지도 않고 사라졌다.
+// 그래서 기준은 여기 하나뿐이다.
+const isRiding = (passenger, trip) =>
+  (trip === TRIP_OUTBOUND ? passenger.attendingOutbound : passenger.attending) !== false;
+
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 function formatClock(value) {
   return value.toLocaleTimeString('ko-KR', {
@@ -285,9 +295,9 @@ function AdminApp() {
 
   const passengerCount = useMemo(
     () => passengers.filter(
-      (passenger) => (passenger.name || passenger.address) && passenger.attending !== false,
+      (passenger) => (passenger.name || passenger.address) && isRiding(passenger, tripType),
     ).length,
-    [passengers],
+    [passengers, tripType],
   );
   const maxPassengerCapacity = useMemo(
     () => vehicles.reduce((sum, vehicle) => sum + (Number(vehicle.capacity) || 0), 0) * 2,
@@ -336,13 +346,20 @@ function AdminApp() {
     if (!center.address.trim()) return '센터 주소를 입력해 주세요.';
     const entered = passengers.filter((item) => item.name || item.address);
     if (!entered.length) return '어르신을 한 명 이상 입력해 주세요.';
-    const active = entered.filter((item) => item.attending !== false);
-    if (!active.length) return '출석한 어르신이 없습니다. 출석 토글을 확인해 주세요.';
+    const active = entered.filter((item) => isRiding(item, tripType));
+    if (!active.length) return `${tripLabel(tripType)} 대상 어르신이 없습니다. 탑승 토글을 확인해 주세요.`;
     if (active.length > maxPassengerCapacity) return `등록 차량의 2회 운행 최대 수용 인원은 ${maxPassengerCapacity}명입니다.`;
     for (const [index, passenger] of active.entries()) {
       if (!passenger.name.trim() || !passenger.address.trim()) return `${index + 1}번 어르신의 이름과 주소를 입력해 주세요.`;
       if (!HHMM.test(passenger.pickupStart) || !HHMM.test(passenger.pickupEnd)) return `${passenger.name}님의 시간을 HH:MM 형식으로 입력해 주세요.`;
       if (passenger.pickupStart > passenger.pickupEnd) return `${passenger.name}님의 픽업 하한이 상한보다 늦습니다.`;
+      // 하원 하차 시각은 비워 두면 서버가 등원 시각 + 8시간으로 채운다.
+      // 그래서 넣은 경우에만 본다.
+      const hasDropoff = (passenger.dropoffStart || '') && (passenger.dropoffEnd || '');
+      if (hasDropoff) {
+        if (!HHMM.test(passenger.dropoffStart) || !HHMM.test(passenger.dropoffEnd)) return `${passenger.name}님의 하차 시간을 HH:MM 형식으로 입력해 주세요.`;
+        if (passenger.dropoffStart > passenger.dropoffEnd) return `${passenger.name}님의 하차 하한이 상한보다 늦습니다.`;
+      }
     }
     return null;
   };
@@ -363,7 +380,7 @@ function AdminApp() {
     try {
       const active = passengers
         .filter((item) => item.name || item.address)
-        .filter((item) => item.attending !== false);
+        .filter((item) => isRiding(item, tripType));
       const activeIds = new Set(active.map((item) => item.id));
       const liveRules = pairRules.filter(
         (rule) => rule.passengerIds.every((id) => activeIds.has(id)),

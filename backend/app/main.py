@@ -478,7 +478,27 @@ async def run_optimization(
             status_code=422,
             detail=f"{label} 대상 어르신이 없습니다. 탑승 여부를 확인해 주세요.",
         )
-    request = request.model_copy(update={"passengers": attending})
+    # 동승 규칙이 이번에 안 타시는 분을 가리키면 그대로 두면 안 된다.
+    # 최적화기는 규칙에 적힌 어르신이 명단에 있다고 전제하므로 KeyError 로 터진다.
+    # 등원만/하원만 타시는 분이 있는 한 반드시 생기는 상황이라 여기서 걷어낸다.
+    riding_ids = {p.id for p in attending if p.id}
+    dropped_rules = 0
+
+    def keep(rule) -> bool:
+        nonlocal dropped_rules
+        if all(pid in riding_ids for pid in rule.pair):
+            return True
+        dropped_rules += 1
+        return False
+
+    kept_forbidden = [rule for rule in request.forbidden_pairs if keep(rule)]
+    kept_required = [rule for rule in request.required_pairs if keep(rule)]
+
+    request = request.model_copy(update={
+        "passengers": attending,
+        "forbidden_pairs": kept_forbidden,
+        "required_pairs": kept_required,
+    })
 
     # 노드 순서: 0=센터, 1..n=어르신, n+1..=자차 출발지.
     # optimize_routes 가 이 순서를 그대로 전제한다.
@@ -493,6 +513,10 @@ async def run_optimization(
     response = optimize_routes(request, resolved, settings)
     if absent_count:
         response.notices.append(f"{label} 미탑승 {absent_count}명은 배차에서 제외했습니다.")
+    if dropped_rules:
+        response.notices.append(
+            f"{label}에 타지 않는 어르신이 포함된 동승 규칙 {dropped_rules}건은 이번 계산에서 뺐습니다."
+        )
     _archive_passengers(request, resolved)
     _archive_vehicles(request, resolved)
 

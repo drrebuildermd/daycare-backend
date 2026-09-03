@@ -195,17 +195,22 @@ class OptimizeRequest(BaseModel):
     required_pairs: list[PairRule] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def pair_rules_reference_attending_passengers(self):
-        attending = {
-            passenger.id for passenger in self.passengers
-            if passenger.attending and passenger.id
-        }
+    def pair_rules_reference_known_passengers(self):
+        # 명단에 아예 없는 id 만 막는다. 오타나 지워진 어르신을 가리키는 규칙은
+        # 데이터 오류라서 일찍 잡아야 한다.
+        #
+        # 탑승 여부는 여기서 보지 않는다. 등원만 타시는 분, 하원만 타시는 분이
+        # 있어서 '타는가' 는 계산하는 방향마다 답이 다르기 때문이다. 예전에는
+        # 여기서 등원 스위치만 보고 막는 바람에, 하원만 타시는 분이 낀 규칙
+        # 하나 때문에 등원 배차 전체가 422 로 거절됐다.
+        # 이번 방향에 안 타시는 분이 낀 규칙은 main.py 가 빼고 안내한다.
+        known = {passenger.id for passenger in self.passengers if passenger.id}
         for label, rules in (("동승 불가", self.forbidden_pairs), ("필수 동승", self.required_pairs)):
             for rule in rules:
-                unknown = [pid for pid in rule.passenger_ids if pid not in attending]
+                unknown = [pid for pid in rule.passenger_ids if pid not in known]
                 if unknown:
                     raise ValueError(
-                        f"{label} 규칙이 출석 명단에 없는 어르신을 가리킵니다: {', '.join(unknown)}"
+                        f"{label} 규칙이 명단에 없는 어르신을 가리킵니다: {', '.join(unknown)}"
                     )
         return self
 
