@@ -59,15 +59,16 @@ export const optimizeRoutes = (payload) =>
 // 배차가 안 된 분들을 어떻게 하면 태울 수 있는지 묻는다.
 // 배차 계산과 일부러 떼어 둔 API 다. 이쪽은 최대 6초까지 걸리므로
 // 원장님이 결과를 보고 궁금할 때만 부른다.
-export const recommendResolution = (payload, unassignedIds, runId) =>
+export const recommendResolution = (payload, unassignedIds, runId, considerRevenueLoss = true) =>
   request('/api/optimize/recommend', {
     method: 'POST',
     body: JSON.stringify({
       request: payload,
       unassigned_passenger_ids: unassignedIds,
       optimization_run_id: runId || null,
+      consider_revenue_loss: considerRevenueLoss,
     }),
-  }, 90000);
+  }, 120000);
 export const saveRideCompletion = (payload) => request('/api/ride-completions', { method: 'POST', body: JSON.stringify(payload) });
 // 등원(inbound)은 어르신을 센터로 모셔오는 운행, 하원(outbound)은 댁으로 모셔다드리는 운행.
 export const TRIP_INBOUND = 'inbound';

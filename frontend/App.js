@@ -40,6 +40,7 @@ import {
   optimizeRoutes,
   saveRideCompletion,
 } from './src/api';
+import TimeInput from './src/ui/TimeInput';
 import PassengerForm from './src/components/PassengerForm';
 import VehicleForm from './src/components/VehicleForm';
 import VehicleResults from './src/components/VehicleResults';
@@ -86,6 +87,8 @@ const emptyVehicle = () => ({
   capacity: '4',
   // 휠체어 고정석. 리프트가 없는 차량이 기본이라 0에서 시작한다.
   wheelchairCapacity: '0',
+  // 이 차량만의 하원 마감. 비워 두면 센터 공통값을 쓴다.
+  outboundDeadline: '',
   // 자차 송영. 기본은 센터 출발.
   driverPhone: '',
   startType: 'center',
@@ -160,6 +163,8 @@ function AdminApp() {
   const [completedStops, setCompletedStops] = useState({});
   const [savingStops, setSavingStops] = useState({});
   const [isCenterAddressModalOpen, setIsCenterAddressModalOpen] = useState(false);
+  // 하원 마감. 비워 두면 서버 기본값(17:00)을 쓴다.
+  const [outboundDeadline, setOutboundDeadline] = useState('17:00');
   const [pairRules, setPairRules] = useState([]);
   const [sending, setSending] = useState(false);
   const [focusVehicleId, setFocusVehicleId] = useState(null);
@@ -180,6 +185,7 @@ function AdminApp() {
           const session = JSON.parse(saved);
           if (session.vehicles) setVehicles(session.vehicles);
           if (session.center) setCenter(session.center);
+          if (session.outboundDeadline) setOutboundDeadline(session.outboundDeadline);
           if (session.passengers) setPassengers(session.passengers);
           if (session.pairRules) setPairRules(session.pairRules);
           // v1 은 배차 결과를 result 하나로 들고 있었다. 그때는 등원뿐이었다.
@@ -324,8 +330,18 @@ function AdminApp() {
     ).length,
     [passengers, tripType],
   );
+  // 화면에 보여 주는 '2회 최대'. 평상시 기준이다.
   const maxPassengerCapacity = useMemo(
     () => vehicles.reduce((sum, vehicle) => sum + (Number(vehicle.capacity) || 0), 0) * 2,
+    [vehicles],
+  );
+  // 계산 자체를 막는 선은 3회차 기준이다.
+  //
+  // 엔진은 3회차까지 검토할 수 있고, 대안 분석기가 '3회차를 돌지 증차할지' 를
+  // 계산해 준다. 그런데 2회차 정원에서 잘라 버리면 원장님이 그 화면에
+  // 도달할 방법이 아예 없다. 정작 그 조언이 필요한 상황에서 막히는 셈이다.
+  const hardPassengerCapacity = useMemo(
+    () => vehicles.reduce((sum, vehicle) => sum + (Number(vehicle.capacity) || 0), 0) * 3,
     [vehicles],
   );
 
@@ -399,7 +415,7 @@ function AdminApp() {
     if (!entered.length) return '어르신을 한 명 이상 입력해 주세요.';
     const active = entered.filter((item) => isRiding(item, tripType));
     if (!active.length) return `${tripLabel(tripType)} 대상 어르신이 없습니다. 탑승 토글을 확인해 주세요.`;
-    if (active.length > maxPassengerCapacity) return `등록 차량의 2회 운행 최대 수용 인원은 ${maxPassengerCapacity}명입니다.`;
+    if (active.length > hardPassengerCapacity) return `등록 차량으로는 3회차까지 돌려도 ${hardPassengerCapacity}명이 한계입니다. 차량을 늘리거나 명단을 나눠 주세요.`;
     for (const [index, passenger] of active.entries()) {
       if (!passenger.name.trim() || !passenger.address.trim()) return `${index + 1}번 어르신의 이름과 주소를 입력해 주세요.`;
       if (!HHMM.test(passenger.pickupStart) || !HHMM.test(passenger.pickupEnd)) return `${passenger.name}님의 시간을 HH:MM 형식으로 입력해 주세요.`;
@@ -439,6 +455,7 @@ function AdminApp() {
     return {
       trip_type: tripType,
       center: asLocation(center),
+      outbound_deadline: (outboundDeadline || '').trim() || null,
       vehicles: vehicles.map((vehicle) => ({
         id: vehicle.id,
         vehicle_type: vehicle.vehicleType.trim(),
@@ -447,6 +464,7 @@ function AdminApp() {
         driver_phone: (vehicle.driverPhone || '').trim() || null,
         capacity: Number(vehicle.capacity),
         wheelchair_capacity: Number(vehicle.wheelchairCapacity || 0),
+        outbound_deadline: (vehicle.outboundDeadline || '').trim() || null,
         start_type: vehicle.startType === 'custom' ? 'custom' : 'center',
         start_address: (vehicle.startAddress || '').trim() || null,
         // 좌표는 백엔드가 주소로 변환한다. 비어 있으면 보내지 않는다.
@@ -480,6 +498,9 @@ function AdminApp() {
   // 대안 분석. 원장님이 [대안 보기] 를 눌렀을 때만 부른다.
   const [advice, setAdvice] = useState(null);
   const [advising, setAdvising] = useState(false);
+  // 조기 하원에 따른 수가 감소를 비용에 넣을지.
+  // 기본은 넣는다. 조기 하원이 매출에 영향을 주는 것이 원칙이다.
+  const [considerRevenueLoss, setConsiderRevenueLoss] = useState(true);
 
   const askForAdvice = async () => {
     if (!result) return;
@@ -489,11 +510,32 @@ function AdminApp() {
     setAdvice(null);
     try {
       const report = await recommendResolution(
-        buildPayload(), dropped, result.optimization_run_id,
+        buildPayload(), dropped, result.optimization_run_id, considerRevenueLoss,
       );
       setAdvice(report);
     } catch (error) {
       Alert.alert('대안 분석 실패', error.message || '잠시 후 다시 시도해 주세요.');
+    } finally {
+      setAdvising(false);
+    }
+  };
+
+  // 토글을 바꾸면 다시 물어본다. 금액 계산은 서버가 하므로 화면에서
+  // 다시 그릴 수가 없다.
+  const toggleRevenueLoss = async () => {
+    const next = !considerRevenueLoss;
+    setConsiderRevenueLoss(next);
+    if (!result || !advice) return;
+    const dropped = (result.unassigned_passengers || []).map((item) => item.passenger_id);
+    if (!dropped.length) return;
+    setAdvising(true);
+    try {
+      const report = await recommendResolution(
+        buildPayload(), dropped, result.optimization_run_id, next,
+      );
+      setAdvice(report);
+    } catch (error) {
+      Alert.alert('다시 계산하지 못했습니다', error.message || '잠시 후 다시 시도해 주세요.');
     } finally {
       setAdvising(false);
     }
@@ -542,6 +584,7 @@ function AdminApp() {
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({
           vehicles,
           center,
+          outboundDeadline,
           passengers,
           pairRules,
           result: response,
@@ -760,6 +803,51 @@ function AdminApp() {
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {screen === 'vehicles' ? (
             <>
+              {/* 센터 주소는 차량들이 공통으로 쓰는 출발·도착지다.
+                  그래서 어르신 명단이 아니라 차량 쪽에 둔다. */}
+              <Text style={styles.sectionTitle}>센터 정보</Text>
+              <Text style={styles.sectionCaption}>
+                모든 차량의 기본 출발·도착지입니다.
+                자차 송영 차량의 마지막 회차만 기사님 자택(차고지)으로 퇴근합니다.
+              </Text>
+              <View style={styles.centerCard}>
+                <Text style={styles.inputLabel}>센터명</Text>
+                <TextInput style={styles.input} value={center.name} onChangeText={(text) => setCenter({ ...center, name: text })} placeholder="센터명" />
+                <Text style={styles.inputLabel}>센터 주소</Text>
+                <TouchableOpacity
+                  style={{ backgroundColor: '#0BA38E', padding: 12, borderRadius: 8, marginTop: 5, marginBottom: 8 }}
+                  onPress={() => setIsCenterAddressModalOpen(true)}
+                >
+                  <Text style={{ color: 'white', textAlign: 'center', fontWeight: 'bold' }}>
+                    {center.address ? '주소 다시 검색하기' : '정확한 센터 주소 찾기'}
+                  </Text>
+                </TouchableOpacity>
+                <TextInput style={styles.input} value={center.address} onChangeText={(text) => setCenter({ ...center, address: text })} placeholder="도로명 주소" />
+
+                {/* 하원 마감. 이 시각까지 운행이 끝나야 한다.
+                    3회차를 돌지 말지를 엔진이 이 값으로 저울질한다. */}
+                <Text style={styles.inputLabel}>기본 하원 마감 시각</Text>
+                <TimeInput
+                  style={styles.input}
+                  value={outboundDeadline}
+                  onChangeTime={setOutboundDeadline}
+                  placeholder="17:00"
+                  placeholderTextColor="#98A2B3"
+                />
+                <Text style={styles.deadlineHint}>
+                  센터 차량은 이 시각까지 센터로 돌아옵니다.
+                  {'\n'}차량마다 다르면 각 차량에서 따로 지정할 수 있습니다.
+                </Text>
+              </View>
+              <AddressSearch
+                visible={isCenterAddressModalOpen}
+                onSelected={(address) => {
+                  setCenter({ ...center, address, latitude: '', longitude: '' });
+                  setIsCenterAddressModalOpen(false);
+                }}
+                onClose={() => setIsCenterAddressModalOpen(false)}
+              />
+
               <Text style={styles.sectionTitle}>차량 관리</Text>
               <Text style={styles.sectionCaption}>보유 차량을 자유롭게 추가하고 실제 최대 탑승 인원을 설정하세요.</Text>
               <View style={styles.capacitySummary}>
@@ -789,36 +877,6 @@ function AdminApp() {
             </>
           ) : screen === 'input' ? (
             <>
-              <Text style={styles.sectionTitle}>센터 정보</Text>
-              {/* v2.0 부터 자차 송영의 마지막 회차는 센터가 아니라 기사님 자택에서 끝난다.
-                  '모두 센터로 복귀' 는 이제 틀린 말이다. */}
-              <Text style={styles.sectionCaption}>
-                자차 송영 차량의 마지막 회차는 기사님 자택(차고지)으로 퇴근하도록 자동 최적화됩니다.
-              </Text>
-              <View style={styles.centerCard}>
-                <Text style={styles.inputLabel}>센터명</Text>
-                <TextInput style={styles.input} value={center.name} onChangeText={(text) => setCenter({ ...center, name: text })} placeholder="센터명" />
-                <Text style={styles.inputLabel}>센터 주소</Text>
-                <TouchableOpacity
-                  style={{ backgroundColor: '#0BA38E', padding: 12, borderRadius: 8, marginTop: 5, marginBottom: 8 }}
-                  onPress={() => setIsCenterAddressModalOpen(true)}
-                >
-                  <Text style={{ color: 'white', textAlign: 'center', fontWeight: 'bold' }}>
-                    {center.address ? '주소 다시 검색하기' : '정확한 센터 주소 찾기'}
-                  </Text>
-                </TouchableOpacity>
-
-                <TextInput style={styles.input} value={center.address} onChangeText={(text) => setCenter({ ...center, address: text })} placeholder="도로명 주소" />
-              </View>
-              <AddressSearch
-                visible={isCenterAddressModalOpen}
-                onSelected={(address) => {
-                  setCenter({ ...center, address, latitude: '', longitude: '' });
-                  setIsCenterAddressModalOpen(false);
-                }}
-                onClose={() => setIsCenterAddressModalOpen(false)}
-              />
-
               <View style={styles.sectionRow}>
                 {/* 글자가 길어져도 오른쪽 버튼을 밀지 않도록 이쪽이 줄어든다. */}
                 <View style={styles.sectionHeading}>
@@ -954,6 +1012,8 @@ function AdminApp() {
                 advising={advising}
                 onAskAdvice={askForAdvice}
                 onApplyTimeAdvice={applyTimeAdvice}
+                considerRevenueLoss={considerRevenueLoss}
+                onToggleRevenueLoss={toggleRevenueLoss}
               />
             </>
           )}
@@ -1039,6 +1099,7 @@ const styles = StyleSheet.create({
   excelBusy: { opacity: 0.55 },
   excelGhostText: { color: '#07705F', fontWeight: '800', fontSize: 13 },
   excelSolidText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
+  deadlineHint: { color: '#7C8D87', fontSize: 12, lineHeight: 18, marginTop: 6 },
   excelHint: { color: '#7C8D87', fontSize: 12, lineHeight: 18, marginBottom: 10 },
   fileName: { color: '#0BA38E', fontSize: 11, marginTop: -7, marginBottom: 12 },
   addButton: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#98A2B3', borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginBottom: 14 },

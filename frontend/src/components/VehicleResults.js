@@ -104,6 +104,7 @@ export default function VehicleResults({
   vehicles = [],
   // 대안 분석. 원장님이 [대안 보기] 를 눌렀을 때만 채워진다.
   advice, advising, onAskAdvice, onApplyTimeAdvice,
+  considerRevenueLoss, onToggleRevenueLoss,
 }) {
   // 배차 결과는 계산한 순간에 박제된다. 그 뒤에 차량 정보를 고쳐도 반영되지 않고,
   // start_type 이 없던 시절에 계산된 배차에는 이 값이 아예 들어 있지 않다.
@@ -266,6 +267,86 @@ export default function VehicleResults({
               ))}
             </View>
           )}
+
+              {/* 어느 쪽이 이득인가.
+                  3회차가 가능하다는 것만으로는 부족하다. 그게 이득인지
+                  손해인지 답해야 원장님이 결정하실 수 있다. */}
+              {!!(advice && advice.financials) && (
+                <View style={styles.moneyCard}>
+                  <View style={styles.moneyHead}>
+                    <Icon name="excel" size={16} tint={color.teal} />
+                    <Text style={styles.moneyTitle}>어느 쪽이 이득인가</Text>
+                  </View>
+
+                  <Pressable style={styles.moneyToggle} onPress={onToggleRevenueLoss}>
+                    <View
+                      style={[
+                        styles.checkbox,
+                        considerRevenueLoss && styles.checkboxOn,
+                      ]}
+                    >
+                      {considerRevenueLoss && (
+                        <Icon name="done" size={12} tint="#FFFFFF" />
+                      )}
+                    </View>
+                    <Text style={styles.moneyToggleText}>
+                      조기 하원에 따른 수가 감소를 비용에 포함
+                    </Text>
+                  </Pressable>
+
+                  {[advice.financials.scenario_a, advice.financials.scenario_b].map(
+                    (scenario, index) => {
+                      const kind = index === 0 ? 'add_round' : 'add_vehicle';
+                      const picked = advice.financials.recommended === kind;
+                      return (
+                        <View
+                          key={kind}
+                          style={[styles.moneyRow, picked && styles.moneyRowPicked]}
+                        >
+                          <View style={styles.moneyRowHead}>
+                            <Text style={styles.moneyLabel}>
+                              {index === 0 ? 'A안' : 'B안'} {scenario.label}
+                            </Text>
+                            {picked && (
+                              <View style={styles.pickBadge}>
+                                <Text style={styles.pickBadgeText}>권장</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={styles.moneyTotal}>
+                            하루 {scenario.total_won.toLocaleString()}원
+                          </Text>
+                          <Text style={styles.moneyBreak}>
+                            {[
+                              `유류비 ${scenario.fuel_won.toLocaleString()}원`,
+                              scenario.fixed_won
+                                ? `렌트 ${scenario.fixed_won.toLocaleString()}원`
+                                : null,
+                              scenario.revenue_loss_won
+                                ? `수가 감소 ${scenario.revenue_loss_won.toLocaleString()}원`
+                                : null,
+                            ].filter(Boolean).join(' · ')}
+                          </Text>
+                          {scenario.revenue_loss_items.map((item) => (
+                            <Text key={item.passenger_id} style={styles.moneyPerson}>
+                              {item.name} {item.planned_band}→{item.actual_band}
+                              {'  '}−{item.lost_won.toLocaleString()}원
+                            </Text>
+                          ))}
+                        </View>
+                      );
+                    },
+                  )}
+
+                  <Text style={styles.moneyHeadline}>{advice.financials.headline}</Text>
+                  {(advice.financials.notes || []).map((note, index) => (
+                    <Text key={index} style={styles.moneyNote}>· {note}</Text>
+                  ))}
+                  <Text style={styles.moneyFootnote}>
+                    운전은 이미 급여가 나가는 요양보호사가 맡으므로 인건비는 세지 않았습니다.
+                  </Text>
+                </View>
+              )}
         </View>
       )}
 
@@ -358,6 +439,46 @@ export default function VehicleResults({
 
 const styles = StyleSheet.create({
   // 놓치면 안 되는 경고다. 결과 카드보다 먼저, 더 눈에 띄게 둔다.
+  moneyCard: {
+    marginTop: 12, backgroundColor: '#FFFFFF', borderRadius: 12,
+    borderWidth: 1, borderColor: '#B7E4DA', padding: 14,
+  },
+  moneyHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
+  moneyTitle: { fontSize: 14, fontWeight: '800', color: '#07705F' },
+  moneyToggle: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingVertical: 8, marginBottom: 6,
+  },
+  checkbox: {
+    width: 18, height: 18, borderRadius: 5, borderWidth: 1.5,
+    borderColor: '#B7C4C0', alignItems: 'center', justifyContent: 'center',
+  },
+  checkboxOn: { backgroundColor: '#07705F', borderColor: '#07705F' },
+  moneyToggleText: { flex: 1, fontSize: 12, color: '#4A5D57', fontWeight: '600' },
+  moneyRow: {
+    borderRadius: 10, padding: 11, marginTop: 6,
+    backgroundColor: '#F7F9F8', borderWidth: 1, borderColor: '#EDF1EF',
+  },
+  moneyRowPicked: { backgroundColor: '#E9F7EF', borderColor: '#3BB273' },
+  moneyRowHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  moneyLabel: { flex: 1, fontSize: 12, fontWeight: '700', color: '#1B2B26' },
+  pickBadge: {
+    backgroundColor: '#07705F', borderRadius: 999,
+    paddingHorizontal: 7, paddingVertical: 2,
+  },
+  pickBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800' },
+  moneyTotal: {
+    fontSize: 17, fontWeight: '900', color: '#0D2540', marginTop: 3,
+    fontVariant: ['tabular-nums'],
+  },
+  moneyBreak: { fontSize: 11, color: '#7C8D87', marginTop: 2 },
+  moneyPerson: { fontSize: 11, color: '#9B2C2C', marginTop: 3 },
+  moneyHeadline: {
+    marginTop: 12, fontSize: 13, fontWeight: '800',
+    color: '#07705F', lineHeight: 19,
+  },
+  moneyNote: { marginTop: 6, fontSize: 11, color: '#5A6B65', lineHeight: 17 },
+  moneyFootnote: { marginTop: 8, fontSize: 10, color: '#98A2B3' },
   adviceButton: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
     marginTop: 12, paddingVertical: 11, borderRadius: 10,

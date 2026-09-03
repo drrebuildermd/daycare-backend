@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import TextInput from '../ui/TextInput';
+import TimeInput from '../ui/TimeInput';
 import Text from '../ui/Text';
 import Icon from '../ui/Icon';
 import { STAY_HOURS, shiftTime } from '../api';
@@ -16,6 +17,20 @@ const Field = ({ label, ...props }) => (
       style={styles.input}
       placeholderTextColor="#98A2B3"
       {...props}
+    />
+  </View>
+);
+
+// 시각 칸. 숫자만 쳐도 콜론이 붙는다.
+const TimeField = ({ label, value, onChange, placeholder }) => (
+  <View style={styles.field}>
+    <Text style={styles.label}>{label}</Text>
+    <TimeInput
+      style={styles.input}
+      placeholderTextColor="#98A2B3"
+      value={value}
+      onChangeTime={onChange}
+      placeholder={placeholder}
     />
   </View>
 );
@@ -96,24 +111,20 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
         <View style={styles.timeBlock}>
           <View style={styles.timeRow}>
             <View style={styles.timeField}>
-              <Field
+              <TimeField
                 label="픽업 하한"
                 value={value.pickupStart}
-                onChangeText={(text) => set('pickupStart', text)}
+                onChange={(text) => set('pickupStart', text)}
                 placeholder="08:00"
-                keyboardType="numbers-and-punctuation"
-                maxLength={5}
               />
             </View>
             <Text style={styles.tilde}>~</Text>
             <View style={styles.timeField}>
-              <Field
+              <TimeField
                 label="픽업 상한"
                 value={value.pickupEnd}
-                onChangeText={(text) => set('pickupEnd', text)}
+                onChange={(text) => set('pickupEnd', text)}
                 placeholder="08:30"
-                keyboardType="numbers-and-punctuation"
-                maxLength={5}
               />
             </View>
           </View>
@@ -148,24 +159,20 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
         <View style={styles.timeBlock}>
           <View style={styles.timeRow}>
             <View style={styles.timeField}>
-              <Field
+              <TimeField
                 label="하차 하한"
                 value={value.dropoffStart}
-                onChangeText={(text) => set('dropoffStart', text)}
+                onChange={(text) => set('dropoffStart', text)}
                 placeholder={autoStart || '15:30'}
-                keyboardType="numbers-and-punctuation"
-                maxLength={5}
               />
             </View>
             <Text style={styles.tilde}>~</Text>
             <View style={styles.timeField}>
-              <Field
+              <TimeField
                 label="하차 상한"
                 value={value.dropoffEnd}
-                onChangeText={(text) => set('dropoffEnd', text)}
+                onChange={(text) => set('dropoffEnd', text)}
                 placeholder={autoEnd || '17:00'}
-                keyboardType="numbers-and-punctuation"
-                maxLength={5}
               />
             </View>
           </View>

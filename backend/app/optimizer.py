@@ -179,12 +179,17 @@ CONSTRAINT_VERSION = "CARE_CONSTRAINT_V3.1"
 OBJECTIVE_VERSION = "CARE_OBJECTIVE_V2.1"
 
 
-def deadline_of(vehicle, settings: Settings) -> int | None:
+def deadline_of(vehicle, settings: Settings, center_default: str | None = None) -> int | None:
     """이 차량의 하원 마감 시각(분).
 
-    차량에 적힌 값이 우선이고, 없으면 센터 공통값을 쓴다.
+    차량에 적힌 값이 가장 우선이고, 없으면 원장님이 화면에서 정한 센터 공통값,
+    그것도 없으면 서버 기본값을 쓴다.
     """
-    raw = (vehicle.outbound_deadline or "").strip() or settings.outbound_deadline
+    raw = (
+        (vehicle.outbound_deadline or "").strip()
+        or (center_default or "").strip()
+        or settings.outbound_deadline
+    )
     if not raw:
         return None
     try:
@@ -345,7 +350,9 @@ def optimize_routes(
                 driver_phone=vehicle.driver_phone,
                 capacity=vehicle.capacity,
                 wheelchair_capacity=vehicle.wheelchair_capacity,
-                deadline_minutes=deadline_of(vehicle, settings),
+                deadline_minutes=deadline_of(
+                    vehicle, settings, request.outbound_deadline
+                ),
                 start_node=start_node,
             )
         )

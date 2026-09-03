@@ -204,6 +204,9 @@ class OptimizeRequest(BaseModel):
     center: LocationInput
     vehicles: list[VehicleInput] = Field(min_length=1)
     passengers: list[PassengerInput] = Field(min_length=1)
+    # 센터 공통 하원 마감 시각. 비워 두면 서버 기본값을 쓴다.
+    # 차량에 적힌 값이 이것보다 우선한다.
+    outbound_deadline: str | None = None
     # 같은 차·같은 회차에 함께 태우면 안 되는 조합 (기피)
     forbidden_pairs: list[PairRule] = Field(default_factory=list)
     # 반드시 같은 차·같은 회차에 함께 태워야 하는 조합 (짝꿍)

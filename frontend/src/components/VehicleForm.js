@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import TextInput from '../ui/TextInput';
+import TimeInput from '../ui/TimeInput';
 import Text from '../ui/Text';
 import Icon from '../ui/Icon';
 import { color } from '../theme';
@@ -34,6 +35,7 @@ export default function VehicleForm({ value, index, onChange, onRemove }) {
     driver ? `(담당: ${driver})` : '(담당 미지정)',
     value.capacity ? `· ${value.capacity}인승` : '',
     wheelchairSeats > 0 ? `· 휠체어 ${wheelchairSeats}석` : '',
+    (value.outboundDeadline || '').trim() ? `· 마감 ${value.outboundDeadline}` : '',
   ].filter(Boolean).join(' ');
 
   return (
@@ -105,6 +107,23 @@ export default function VehicleForm({ value, index, onChange, onRemove }) {
       <Text style={styles.startHint}>
         휠체어를 탄 채로 고정할 수 있는 자리 수입니다. 총 정원과 따로 셉니다.
         {'\n'}0으로 두면 휠체어 이용 어르신을 이 차량에 배차하지 않습니다.
+      </Text>
+
+      {/* 이 차량만의 하원 마감. 자차는 센터로 돌아오지 않아 조금 늦게 잡기도 한다. */}
+      <View style={styles.field}>
+        <Text style={styles.label}>하원 마감 시각 (이 차량만)</Text>
+        <TimeInput
+          style={styles.input}
+          placeholderTextColor="#98A2B3"
+          value={value.outboundDeadline}
+          onChangeTime={(text) => set('outboundDeadline', text)}
+          placeholder="비우면 센터 공통값"
+        />
+      </View>
+      <Text style={styles.startHint}>
+        {isCustomStart
+          ? '자차는 마지막 어르신을 내려드리는 시각을 기준으로 봅니다. 차고지 퇴근길은 세지 않습니다.'
+          : '센터 차량은 센터로 돌아오는 시각을 기준으로 봅니다.'}
       </Text>
 
       {/* --- 자차 송영 --- */}
