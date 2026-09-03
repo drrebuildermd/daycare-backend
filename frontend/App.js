@@ -36,6 +36,7 @@ import {
   fetchTodayDispatch,
   getTodayCompletionExportUrl,
   notifyDispatch,
+  recommendResolution,
   optimizeRoutes,
   saveRideCompletion,
 } from './src/api';
@@ -373,60 +374,113 @@ function AdminApp() {
     return output;
   };
 
+  // 배차 계산과 대안 분석이 같은 입력을 써야 한다. 두 곳에서 따로 만들면
+  // 분석이 원장님 화면에 보이는 것과 다른 판을 푸는 일이 생긴다.
+  const buildPayload = () => {
+    const active = passengers
+      .filter((item) => item.name || item.address)
+      .filter((item) => isRiding(item, tripType));
+    const activeIds = new Set(active.map((item) => item.id));
+    const liveRules = pairRules.filter(
+      (rule) => rule.passengerIds.every((id) => activeIds.has(id)),
+    );
+    const asRule = (rule) => ({ passenger_ids: rule.passengerIds });
+
+    return {
+      trip_type: tripType,
+      center: asLocation(center),
+      vehicles: vehicles.map((vehicle) => ({
+        id: vehicle.id,
+        vehicle_type: vehicle.vehicleType.trim(),
+        plate_number: vehicle.plateNumber.trim(),
+        driver_name: (vehicle.driverName || '').trim() || null,
+        driver_phone: (vehicle.driverPhone || '').trim() || null,
+        capacity: Number(vehicle.capacity),
+        wheelchair_capacity: Number(vehicle.wheelchairCapacity || 0),
+        start_type: vehicle.startType === 'custom' ? 'custom' : 'center',
+        start_address: (vehicle.startAddress || '').trim() || null,
+        // 좌표는 백엔드가 주소로 변환한다. 비어 있으면 보내지 않는다.
+        start_latitude: vehicle.startLatitude === '' || vehicle.startLatitude == null
+          ? null : Number(vehicle.startLatitude),
+        start_longitude: vehicle.startLongitude === '' || vehicle.startLongitude == null
+          ? null : Number(vehicle.startLongitude),
+      })),
+      passengers: active.map((item) => ({
+        ...asLocation(item),
+        id: item.id,
+        detail_address: (item.detailAddress || '').trim(),
+        attending: item.attending !== false,
+        attending_outbound: item.attendingOutbound !== false,
+        pickup_start: item.pickupStart,
+        pickup_end: item.pickupEnd,
+        wheelchair: item.wheelchair,
+        dropoff_start: (item.dropoffStart || '').trim() || null,
+        dropoff_end: (item.dropoffEnd || '').trim() || null,
+        guardian_phone: (item.guardianPhone || '').trim(),
+        passenger_phone: (item.passengerPhone || '').trim() || null,
+        // 기존 명단에는 없던 값이다. 없으면 보호자에게 걸고, 알림은 켠 것으로 본다.
+        primary_contact: item.primaryContact === 'self' ? 'self' : 'guardian',
+        sms_opt_in: item.smsOptIn !== false,
+      })),
+      forbidden_pairs: liveRules.filter((rule) => rule.kind === 'forbidden').map(asRule),
+      required_pairs: liveRules.filter((rule) => rule.kind === 'required').map(asRule),
+    };
+  };
+
+  // 대안 분석. 원장님이 [대안 보기] 를 눌렀을 때만 부른다.
+  const [advice, setAdvice] = useState(null);
+  const [advising, setAdvising] = useState(false);
+
+  const askForAdvice = async () => {
+    if (!result) return;
+    const dropped = (result.unassigned_passengers || []).map((item) => item.passenger_id);
+    if (!dropped.length) return;
+    setAdvising(true);
+    setAdvice(null);
+    try {
+      const report = await recommendResolution(
+        buildPayload(), dropped, result.optimization_run_id,
+      );
+      setAdvice(report);
+    } catch (error) {
+      Alert.alert('대안 분석 실패', error.message || '잠시 후 다시 시도해 주세요.');
+    } finally {
+      setAdvising(false);
+    }
+  };
+
+  // 제안한 시간을 그대로 명단에 적용한다. 원장님이 어르신을 한 분씩
+  // 찾아 고치게 하면 제안이 있어도 실제로 쓰이지 않는다.
+  const applyTimeAdvice = (actions) => {
+    if (!actions || !actions.length) return;
+    const byId = new Map(actions.map((item) => [item.passenger_id, item]));
+    const outbound = tripType === TRIP_OUTBOUND;
+    setPassengers((current) => current.map((passenger) => {
+      const action = byId.get(passenger.id);
+      if (!action) return passenger;
+      const [low, high] = action.suggested_window.split('~');
+      return outbound
+        ? { ...passenger, dropoffStart: low, dropoffEnd: high }
+        : { ...passenger, pickupStart: low, pickupEnd: high };
+    }));
+    setAdvice(null);
+    Alert.alert(
+      '시간을 수정했습니다',
+      `${actions.length}분의 희망 시각을 바꿨습니다.\n`
+      + '[최적 배차 계산하기] 를 다시 눌러 주세요.',
+    );
+    setScreen('input');
+  };
+
   const submit = async () => {
     const message = validate();
     if (message) return Alert.alert('입력 확인', message);
     setLoading(true);
     try {
-      const active = passengers
-        .filter((item) => item.name || item.address)
-        .filter((item) => isRiding(item, tripType));
-      const activeIds = new Set(active.map((item) => item.id));
-      const liveRules = pairRules.filter(
-        (rule) => rule.passengerIds.every((id) => activeIds.has(id)),
-      );
-      const asRule = (rule) => ({ passenger_ids: rule.passengerIds });
-
-      const response = await optimizeRoutes({
-        trip_type: tripType,
-        center: asLocation(center),
-        vehicles: vehicles.map((vehicle) => ({
-          id: vehicle.id,
-          vehicle_type: vehicle.vehicleType.trim(),
-          plate_number: vehicle.plateNumber.trim(),
-          driver_name: (vehicle.driverName || '').trim() || null,
-          driver_phone: (vehicle.driverPhone || '').trim() || null,
-          capacity: Number(vehicle.capacity),
-          wheelchair_capacity: Number(vehicle.wheelchairCapacity || 0),
-          start_type: vehicle.startType === 'custom' ? 'custom' : 'center',
-          start_address: (vehicle.startAddress || '').trim() || null,
-          // 좌표는 백엔드가 주소로 변환한다. 비어 있으면 보내지 않는다.
-          start_latitude: vehicle.startLatitude === '' || vehicle.startLatitude == null
-            ? null : Number(vehicle.startLatitude),
-          start_longitude: vehicle.startLongitude === '' || vehicle.startLongitude == null
-            ? null : Number(vehicle.startLongitude),
-        })),
-        passengers: active.map((item) => ({
-          ...asLocation(item),
-          id: item.id,
-          detail_address: (item.detailAddress || '').trim(),
-          attending: item.attending !== false,
-          attending_outbound: item.attendingOutbound !== false,
-          pickup_start: item.pickupStart,
-          pickup_end: item.pickupEnd,
-          wheelchair: item.wheelchair,
-          dropoff_start: (item.dropoffStart || '').trim() || null,
-          dropoff_end: (item.dropoffEnd || '').trim() || null,
-          guardian_phone: (item.guardianPhone || '').trim(),
-          passenger_phone: (item.passengerPhone || '').trim() || null,
-          // 기존 명단에는 없던 값이다. 없으면 보호자에게 걸고, 알림은 켠 것으로 본다.
-          primary_contact: item.primaryContact === 'self' ? 'self' : 'guardian',
-          sms_opt_in: item.smsOptIn !== false,
-        })),
-        forbidden_pairs: liveRules.filter((rule) => rule.kind === 'forbidden').map(asRule),
-        required_pairs: liveRules.filter((rule) => rule.kind === 'required').map(asRule),
-      });
+      const response = await optimizeRoutes(buildPayload());
       setResult(response);
+      // 판이 바뀌었으니 지난 분석은 버린다.
+      setAdvice(null);
       setScreen('results');
       try {
         const today = await fetchTodayCompletions();
@@ -825,6 +879,10 @@ function AdminApp() {
                 onComplete={completeStop}
                 focusVehicleId={focusVehicleId}
                 acks={acks}
+                advice={advice}
+                advising={advising}
+                onAskAdvice={askForAdvice}
+                onApplyTimeAdvice={applyTimeAdvice}
               />
             </>
           )}

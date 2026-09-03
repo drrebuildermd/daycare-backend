@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import Text from '../ui/Text';
 import Icon from '../ui/Icon';
 import { color } from '../theme';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import Accordion from './Accordion';
 import RouteMap from './RouteMap';
@@ -102,6 +102,8 @@ function formatAckTime(value) {
 export default function VehicleResults({
   result, completedStops, savingStops, onComplete, focusVehicleId, acks = [],
   vehicles = [],
+  // 대안 분석. 원장님이 [대안 보기] 를 눌렀을 때만 채워진다.
+  advice, advising, onAskAdvice, onApplyTimeAdvice,
 }) {
   // 배차 결과는 계산한 순간에 박제된다. 그 뒤에 차량 정보를 고쳐도 반영되지 않고,
   // start_type 이 없던 시절에 계산된 배차에는 이 값이 아예 들어 있지 않다.
@@ -162,6 +164,106 @@ export default function VehicleResults({
                 해당 어르신의 시간 범위를 넓히거나, 투입 차량(또는 회차)을 추가한 뒤
                 다시 계산해 보세요.
               </Text>
+            </View>
+          )}
+
+          {/* 이유만 말하고 끝내면 원장님은 무엇을 해야 할지 모른다.
+              시간을 조절할 일인지, 회차를 늘릴 일인지, 차를 늘릴 일인지까지
+              답해 줘야 한다. 계산에 최대 6초가 걸려 눌렀을 때만 부른다. */}
+          {!advice && (
+            <Pressable
+              style={[styles.adviceButton, advising && styles.adviceButtonBusy]}
+              onPress={onAskAdvice}
+              disabled={advising}
+            >
+              {advising ? (
+                <>
+                  <ActivityIndicator size="small" color="#9B2C2C" />
+                  <Text style={styles.adviceButtonText}>
+                    대안을 찾는 중입니다 (최대 6초)
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Icon name="warning" size={15} tint="#9B2C2C" />
+                  <Text style={styles.adviceButtonText}>대안 보기 (왜 안 되나요?)</Text>
+                </>
+              )}
+            </Pressable>
+          )}
+
+          {advice && (
+            <View style={styles.adviceBox}>
+              {(advice.options || []).map((option, index) => (
+                <View
+                  key={`${option.kind}-${index}`}
+                  style={[
+                    styles.adviceOption,
+                    option.feasible ? styles.adviceOk : styles.adviceNo,
+                  ]}
+                >
+                  <View style={styles.adviceHead}>
+                    <View
+                      style={[
+                        styles.adviceRank,
+                        option.feasible ? styles.adviceRankOk : styles.adviceRankNo,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.adviceRankText,
+                          option.feasible
+                            ? styles.adviceRankTextOk
+                            : styles.adviceRankTextNo,
+                        ]}
+                      >
+                        {option.priority}순위
+                      </Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.adviceHeadline,
+                        !option.feasible && styles.adviceHeadlineNo,
+                      ]}
+                    >
+                      {option.headline}
+                    </Text>
+                  </View>
+
+                  {!!option.detail && (
+                    <Text style={styles.adviceDetail}>{option.detail}</Text>
+                  )}
+
+                  {(option.actions || []).length > 0 && (
+                    <View style={styles.adviceActions}>
+                      {option.actions.map((action) => (
+                        <View key={action.passenger_id} style={styles.adviceRow}>
+                          <Text style={styles.adviceName}>{action.name}</Text>
+                          <Text style={styles.adviceTime}>
+                            {action.current_window} → {action.suggested_window}
+                          </Text>
+                          {!!action.scheduled_time && (
+                            <Text style={styles.adviceEta}>
+                              실제 도착 {action.scheduled_time}
+                            </Text>
+                          )}
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {option.feasible && option.kind === 'adjust_time' && (
+                    <Pressable
+                      style={styles.applyButton}
+                      onPress={() => onApplyTimeAdvice(option.actions)}
+                    >
+                      <Text style={styles.applyButtonText}>
+                        이대로 적용 ({option.actions.length}명)
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              ))}
             </View>
           )}
         </View>
@@ -256,6 +358,40 @@ export default function VehicleResults({
 
 const styles = StyleSheet.create({
   // 놓치면 안 되는 경고다. 결과 카드보다 먼저, 더 눈에 띄게 둔다.
+  adviceButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    marginTop: 12, paddingVertical: 11, borderRadius: 10,
+    borderWidth: 1, borderColor: '#D64545', backgroundColor: '#FFFFFF',
+  },
+  adviceButtonBusy: { opacity: 0.7 },
+  adviceButtonText: { color: '#9B2C2C', fontSize: 13, fontWeight: '800' },
+
+  adviceBox: { marginTop: 12, gap: 8 },
+  adviceOption: { borderRadius: 10, padding: 12, borderWidth: 1 },
+  adviceOk: { backgroundColor: '#FFFFFF', borderColor: '#3BB273' },
+  adviceNo: { backgroundColor: '#FBF7F7', borderColor: '#E5D5D5' },
+  adviceHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 7 },
+  adviceRank: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, marginTop: 1 },
+  adviceRankOk: { backgroundColor: '#E9F7EF' },
+  adviceRankNo: { backgroundColor: '#EFE8E8' },
+  adviceRankText: { fontSize: 10, fontWeight: '800' },
+  adviceRankTextOk: { color: '#237B4B' },
+  adviceRankTextNo: { color: '#8A6A6A' },
+  adviceHeadline: { flex: 1, fontSize: 13, fontWeight: '700', color: '#1B2B26', lineHeight: 19 },
+  adviceHeadlineNo: { color: '#8A6A6A', fontWeight: '600' },
+  adviceDetail: { marginTop: 6, fontSize: 12, color: '#5A6B65', lineHeight: 18 },
+  adviceActions: { marginTop: 8, gap: 6 },
+  adviceRow: {
+    backgroundColor: '#F6FAF8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7,
+  },
+  adviceName: { fontSize: 12, fontWeight: '700', color: '#1B2B26' },
+  adviceTime: { fontSize: 12, color: '#237B4B', fontWeight: '600', marginTop: 1 },
+  adviceEta: { fontSize: 11, color: '#7C8D87', marginTop: 1 },
+  applyButton: {
+    marginTop: 10, paddingVertical: 10, borderRadius: 9,
+    backgroundColor: '#07705F', alignItems: 'center',
+  },
+  applyButtonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
   dropGroup: { marginTop: 8 },
   dropReason: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 },
   dropReasonText: { color: '#9B2C2C', fontSize: 12, fontWeight: '800' },
