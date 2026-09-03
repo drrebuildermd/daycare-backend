@@ -43,7 +43,7 @@ import {
 import PassengerForm from './src/components/PassengerForm';
 import VehicleForm from './src/components/VehicleForm';
 import VehicleResults from './src/components/VehicleResults';
-import { pickPassengerExcel } from './src/excel';
+import { downloadPassengerTemplate, pickPassengerExcel } from './src/excel';
 import AddressSearch from './src/components/AddressSearch';
 import PairRuleEditor from './src/components/PairRuleEditor';
 import SummaryBar from './src/components/SummaryBar';
@@ -337,15 +337,41 @@ function AdminApp() {
     setVehicles((current) => current.map((item, itemIndex) => itemIndex === index ? next : item));
   };
 
+  const [excelBusy, setExcelBusy] = useState(false);
+
   const importExcel = async () => {
+    setExcelBusy(true);
     try {
       const imported = await pickPassengerExcel();
       if (!imported) return;
       setPassengers(imported.passengers);
       setExcelName(imported.fileName);
-      Alert.alert('불러오기 완료', `${imported.passengers.length}명의 정보를 불러왔습니다.`);
+      const wheelchairs = imported.passengers.filter((item) => item.wheelchair).length;
+      Alert.alert(
+        '불러오기 완료',
+        `${imported.passengers.length}명을 불러왔습니다.`
+        + (wheelchairs ? `\n휠체어 이용 ${wheelchairs}명이 포함되어 있습니다.` : ''),
+      );
     } catch (error) {
-      Alert.alert('엑셀 읽기 실패', error.message);
+      // 어느 줄이 왜 잘못됐는지 그대로 보여 준다. 원장님이 엑셀에서
+      // 바로 찾아 고치실 수 있어야 한다.
+      Alert.alert('엑셀을 불러오지 못했습니다', error.message);
+    } finally {
+      setExcelBusy(false);
+    }
+  };
+
+  const getTemplate = async () => {
+    setExcelBusy(true);
+    try {
+      const saved = await downloadPassengerTemplate();
+      if (!saved.shared) {
+        Alert.alert('양식을 만들었습니다', `저장 위치: ${saved.path}`);
+      }
+    } catch (error) {
+      Alert.alert('양식을 만들지 못했습니다', error.message);
+    } finally {
+      setExcelBusy(false);
     }
   };
 
@@ -794,15 +820,36 @@ function AdminApp() {
               />
 
               <View style={styles.sectionRow}>
-                <View>
+                {/* 글자가 길어져도 오른쪽 버튼을 밀지 않도록 이쪽이 줄어든다. */}
+                <View style={styles.sectionHeading}>
                   <Text style={styles.sectionTitle}>어르신 정보</Text>
                   <Text style={styles.sectionCaption}>출석 {passengerCount}명 · 등록 차량 2회 최대 {maxPassengerCapacity}명</Text>
                 </View>
-                <Pressable style={styles.excelButton} onPress={importExcel}>
-                  <Icon name="excel" size={15} tint={color.teal} />
-                  <Text style={styles.excelButtonText}>엑셀 불러오기</Text>
+              </View>
+
+              {/* 엑셀 한 줄. 양식을 먼저 받고 채워서 올리는 순서라 왼쪽에 둔다. */}
+              <View style={styles.excelRow}>
+                <Pressable
+                  style={[styles.excelButton, styles.excelGhost, excelBusy && styles.excelBusy]}
+                  onPress={getTemplate}
+                  disabled={excelBusy}
+                >
+                  <Icon name="excel" size={16} tint={color.teal} />
+                  <Text style={styles.excelGhostText} numberOfLines={1}>표준 양식 받기</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.excelButton, styles.excelSolid, excelBusy && styles.excelBusy]}
+                  onPress={importExcel}
+                  disabled={excelBusy}
+                >
+                  <Icon name="excel" size={16} tint="#FFFFFF" />
+                  <Text style={styles.excelSolidText} numberOfLines={1}>엑셀 불러오기</Text>
                 </Pressable>
               </View>
+              <Text style={styles.excelHint}>
+                양식을 받아 채운 뒤 올리시면 명단이 한 번에 들어갑니다.
+                {'\n'}빠진 값이 있으면 몇 번째 줄인지 알려 드립니다.
+              </Text>
               {!!excelName && <Text style={styles.fileName}>불러온 파일: {excelName}</Text>}
 
               {passengers.map((passenger, index) => (
@@ -971,8 +1018,28 @@ const styles = StyleSheet.create({
   inputLabel: { color: '#667085', fontWeight: '700', fontSize: 13, marginBottom: 6 },
   input: { backgroundColor: '#F8F9FB', borderWidth: 1, borderColor: '#E4E7EC', borderRadius: 12, paddingHorizontal: 13, height: 48, fontSize: 15, color: '#0D2540', marginBottom: 12 },
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  excelButton: { backgroundColor: '#E6F7F4', borderRadius: 10, paddingHorizontal: 11, paddingVertical: 9 },
-  excelButtonText: { color: '#07705F', fontWeight: '800', fontSize: 12 },
+  // 제목이 길어져도 버튼을 밀지 않도록 이쪽만 줄어들게 한다.
+  // minWidth 0 이 없으면 flex 자식이 내용 너비 아래로는 줄지 않아
+  // 옆 버튼의 글자가 잘린다. 예전에 '엑셀 불러오기' 가 잘리던 이유다.
+  sectionHeading: { flex: 1, minWidth: 0 },
+  excelRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  excelButton: {
+    flex: 1,
+    // 이 값이 없으면 아이콘과 글자가 세로로 쌓인다. RN 의 기본은 column 이다.
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 11,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  excelGhost: { backgroundColor: '#E6F7F4', borderWidth: 1, borderColor: '#B7E4DA' },
+  excelSolid: { backgroundColor: '#07705F' },
+  excelBusy: { opacity: 0.55 },
+  excelGhostText: { color: '#07705F', fontWeight: '800', fontSize: 13 },
+  excelSolidText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
+  excelHint: { color: '#7C8D87', fontSize: 12, lineHeight: 18, marginBottom: 10 },
   fileName: { color: '#0BA38E', fontSize: 11, marginTop: -7, marginBottom: 12 },
   addButton: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#98A2B3', borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginBottom: 14 },
   addButtonText: { color: '#667085', fontWeight: '800' },
