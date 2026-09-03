@@ -437,6 +437,7 @@ async def recommend_resolution(
         settings,
         payload.unassigned_passenger_ids,
         payload.optimization_run_id,
+        payload.consider_revenue_loss,
     )
 
     # 무엇을 제안했는지 이력에 붙인다. 나중에 원장님이 이 제안을 받아들였는지

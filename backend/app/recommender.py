@@ -26,11 +26,17 @@ import time
 
 from .config import Settings
 from .geocoding import ResolvedLocation
+from .finance import build_scenarios
 from .models import (
+    FinancialComparison,
     OptimizeRequest,
     RecommendationAction,
     RecommendationOption,
     RecommendationReport,
+    RevenueLossEntry,
+    ScenarioCostView,
+
+    VehicleInput,
     format_hhmm,
     parse_hhmm,
 )
@@ -48,19 +54,16 @@ MAX_TRIPS_PER_VEHICLE = 3
 DAY_START = 0
 DAY_END = 24 * 60 - 1
 
-
 def _relaxed_settings(settings: Settings) -> Settings:
     return settings.model_copy(
         update={"solver_time_limit_seconds": RELAXATION_TIME_LIMIT_SECONDS}
     )
-
 
 def _window_fields(trip_type: str) -> tuple[str, str]:
     """이 방향에서 실제로 쓰는 시각 칸 이름."""
     if trip_type == "outbound":
         return "dropoff_start", "dropoff_end"
     return "pickup_start", "pickup_end"
-
 
 def _assigned_ids(result) -> set[str]:
     return {
@@ -71,7 +74,6 @@ def _assigned_ids(result) -> set[str]:
         for stop in trip.stops
     }
 
-
 def _scheduled_times(result) -> dict[str, str]:
     return {
         stop.passenger_id: stop.estimated_pickup
@@ -81,11 +83,9 @@ def _scheduled_times(result) -> dict[str, str]:
         for stop in trip.stops
     }
 
-
 # ---------------------------------------------------------------------------
 # 0단계 — 산수
 # ---------------------------------------------------------------------------
-
 
 def _capacity_check(request: OptimizeRequest) -> dict:
     """솔버를 부르기 전에 용량이 애초에 되는지 센다.
@@ -111,7 +111,6 @@ def _capacity_check(request: OptimizeRequest) -> dict:
             0, wheelchair_riders - wheelchair_seats * MAX_TRIPS_PER_VEHICLE
         ),
     }
-
 
 def _structural_option(numbers: dict, priority: int) -> RecommendationOption:
     """무엇이 얼마나 모자란지 숫자로 말한다."""
@@ -168,11 +167,9 @@ def _structural_option(numbers: dict, priority: int) -> RecommendationOption:
         resolves_count=0,
     )
 
-
 # ---------------------------------------------------------------------------
 # 1단계 — 시간 완화
 # ---------------------------------------------------------------------------
-
 
 def _widen(request: OptimizeRequest, target_ids: set[str], minutes: int) -> OptimizeRequest:
     """빠진 분의 희망 시각만 앞뒤로 넓힌다.
@@ -203,7 +200,6 @@ def _widen(request: OptimizeRequest, target_ids: set[str], minutes: int) -> Opti
         }))
 
     return request.model_copy(update={"passengers": widened})
-
 
 def _time_option(
     request: OptimizeRequest,
@@ -253,11 +249,190 @@ def _time_option(
         resolves_count=len(actions),
     )
 
-
 # ---------------------------------------------------------------------------
 # 본체
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# 재무 비교 (v4.0)
+# ---------------------------------------------------------------------------
+
+def _center_times(result, trip_type: str) -> dict[str, int]:
+    """어르신마다 센터에 있는 시간이 언제 끝나는가(분).
+
+    하원이면 그분을 태운 차가 센터를 떠나는 시각이다. 그때 센터를 나선다.
+    등원이면 그분을 태운 차가 센터에 도착하는 시각이다. 그때부터 머무신다.
+    """
+    times: dict[str, int] = {}
+    for vehicle in result.vehicles:
+        for trip in vehicle.trips:
+            if not trip.used:
+                continue
+            stamp = trip.departure_time if trip_type == "outbound" else trip.return_time
+            if not stamp:
+                continue
+            minutes = parse_hhmm(stamp)
+            for stop in trip.stops:
+                if stop.passenger_id:
+                    times[stop.passenger_id] = minutes
+    return times
+
+def _lost_hours(plan_a, plan_b, trip_type: str) -> dict[str, float]:
+    """A안을 고르면 어르신마다 이용시간이 몇 시간 줄어드는가.
+
+    ⚠️ 지금은 이 값이 거의 항상 비어 있다. 알고 있는 한계다.
+
+    현장에서 3회차가 비싼 이유는 '기사님 퇴근 시각 안에 세 번을 우겨넣으려면
+    1회차를 훨씬 일찍 보내야 하기 때문' 이다. 그런데 이 엔진에는 퇴근 시각이라는
+    제약이 없다. 솔버는 거리와 소요시간만 줄이므로 3회차를 허용해도 앞으로
+    당기는 대신 저녁까지 늘어뜨린다. 압축이 일어나지 않으니 조기 하원도 없다.
+
+    실제로 6명/2석 판에서 재보면 A안(3회차)은 13:47~14:39 에 내보내는데
+    B안(증차)은 12:57 에 전원을 내보낸다. 오히려 B안이 더 이르다.
+
+    이 항이 제대로 돌려면 운행 종료 시각(settings.operation_end_time 같은 것)이
+    제약으로 들어가야 한다. 그전까지 재무 비교는 유류비와 렌트비만으로 판정한다.
+    그 판정도 틀린 것은 아니지만 수가 항이 늘 0원이라는 점을 알고 봐야 한다.
+
+    두 안을 같은 자로 재야 의미가 있다. '계획보다 얼마나 이른가' 는 계획을
+    무엇으로 잡느냐에 따라 답이 달라지지만, 'B안 대신 A안을 고르면 얼마나
+    손해인가' 는 두 결과를 직접 비교하면 되므로 흔들리지 않는다.
+
+    하원은 더 일찍 떠나면 손해, 등원은 더 늦게 도착하면 손해다.
+    """
+    a_times = _center_times(plan_a, trip_type)
+    b_times = _center_times(plan_b, trip_type)
+
+    lost: dict[str, float] = {}
+    for passenger_id, a_minutes in a_times.items():
+        b_minutes = b_times.get(passenger_id)
+        if b_minutes is None:
+            continue
+        gap = (b_minutes - a_minutes) if trip_type == "outbound" else (a_minutes - b_minutes)
+        if gap > 0:
+            lost[passenger_id] = gap / 60.0
+    return lost
+
+def _with_spare_vehicle(request: OptimizeRequest, settings: Settings) -> OptimizeRequest:
+    """차를 한 대 빌렸다고 치고 명단에 끼워 넣는다.
+
+    부족한 것이 휠체어석인데 리프트 없는 차를 넣으면 B안이 성립하지 않는다.
+    그래서 표준 증차 차량에는 고정석이 최소 한 자리 있다.
+    """
+    spare = VehicleInput(
+        id="__spare__",
+        vehicle_type="증차 검토 차량",
+        plate_number="증차검토",
+        capacity=settings.spare_vehicle_capacity,
+        wheelchair_capacity=settings.spare_vehicle_wheelchair_capacity,
+    )
+    return request.model_copy(update={"vehicles": [*request.vehicles, spare]})
+
+def _as_view(cost) -> ScenarioCostView:
+    return ScenarioCostView(
+        label=cost.label,
+        distance_km=cost.distance_km,
+        fuel_won=cost.fuel_won,
+        fixed_won=cost.fixed_won,
+        revenue_loss_won=cost.revenue_loss_won,
+        total_won=cost.total_won,
+        revenue_loss_items=[
+            RevenueLossEntry(
+                passenger_id=item.passenger_id,
+                name=item.name,
+                care_grade=item.care_grade,
+                planned_hours=item.planned_hours,
+                actual_hours=item.actual_hours,
+                planned_band=item.planned_band,
+                actual_band=item.actual_band,
+                lost_won=item.lost_won,
+            )
+            for item in cost.revenue_loss_items
+        ],
+    )
+
+def _compare_money(
+    request: OptimizeRequest,
+    resolved: list[ResolvedLocation],
+    settings: Settings,
+    plan_a,
+    targets: set[str],
+    consider_revenue_loss: bool,
+) -> FinancialComparison | None:
+    """3회차로 버티는 것과 차를 한 대 늘리는 것 중 어느 쪽이 싼지 계산한다.
+
+    plan_a 는 이미 풀어 둔 3회차 결과다. 여기서는 증차안만 한 번 더 푼다.
+    """
+    relaxed = _relaxed_settings(settings)
+    try:
+        plan_b = optimize_routes(
+            _with_spare_vehicle(request, settings), resolved, relaxed
+        )
+    except Exception:  # noqa: BLE001 - 재무 비교 실패가 대안 제시를 막으면 안 된다
+        return None
+
+    # 차를 늘려도 못 태우면 비교 자체가 성립하지 않는다.
+    if not targets <= _assigned_ids(plan_b):
+        return None
+
+    cost_a, cost_b, notes = build_scenarios(
+        label_a=f"기존 차량 {MAX_TRIPS_PER_VEHICLE}회차",
+        distance_a_km=plan_a.total_distance_km,
+        early_departures=_lost_hours(plan_a, plan_b, request.trip_type),
+        passengers=request.passengers,
+        label_b="1대 증차 · 2회차 여유",
+        distance_b_km=plan_b.total_distance_km,
+        settings=settings,
+        consider_revenue_loss=consider_revenue_loss,
+    )
+
+    view_a, view_b = _as_view(cost_a), _as_view(cost_b)
+    difference = abs(view_a.total_won - view_b.total_won)
+
+    # 수가표에 없는 조합이 있었다면 A안 금액을 믿을 수 없다. 판정을 미룬다.
+    incomplete = any("표에 없습니다" in note for note in notes)
+    if incomplete:
+        recommended = None
+        headline = (
+            "수가표에 없는 등급·구간이 있어 어느 쪽이 이득인지 판정을 보류했습니다. "
+            "아래 금액은 확인된 항목만 더한 것입니다."
+        )
+    elif view_a.total_won <= view_b.total_won:
+        recommended = "add_round"
+        headline = (
+            f"{MAX_TRIPS_PER_VEHICLE}회차 운영이 하루 {difference:,}원 유리합니다"
+            f" (월 약 {difference * 22 // 10000}만원)"
+            if difference
+            else f"두 방식의 하루 비용이 같습니다"
+        )
+    else:
+        recommended = "add_vehicle"
+        headline = (
+            f"증차가 하루 {difference:,}원 유리합니다"
+            f" (월 약 {difference * 22 // 10000}만원)"
+        )
+
+    # 손실이 어디서 나는지 짚어 준다. 원장님이 "그럼 그 분만 옮기면?" 을
+    # 바로 판단하실 수 있어야 한다.
+    hit = len(view_a.revenue_loss_items)
+    if consider_revenue_loss and hit:
+        safe = len(_center_times(plan_a, request.trip_type)) - hit
+        names = ", ".join(item.name for item in view_a.revenue_loss_items[:3])
+        more = f" 외 {hit - 3}분" if hit > 3 else ""
+        notes.append(
+            f"수가 감소는 {hit}분({names}{more})에게서 발생하며, "
+            f"나머지 {safe}분은 구간 여유가 있어 손실이 없습니다."
+        )
+
+    return FinancialComparison(
+        consider_revenue_loss=consider_revenue_loss,
+        scenario_a=view_a,
+        scenario_b=view_b,
+        recommended=recommended,
+        difference_won=difference,
+        headline=headline,
+        notes=notes,
+    )
 
 def analyze(
     request: OptimizeRequest,
@@ -265,6 +440,7 @@ def analyze(
     settings: Settings,
     unassigned_ids: list[str],
     optimization_run_id: str | None = None,
+    consider_revenue_loss: bool = True,
 ) -> RecommendationReport:
     """빠진 분을 어떻게 하면 태울 수 있는지 찾는다.
 
@@ -349,12 +525,18 @@ def analyze(
             ),
             resolves_count=len(targets),
         ))
+        # 3회차가 가능하다는 것만으로는 부족하다. 그게 이득인지 손해인지
+        # 답해야 원장님이 결정하실 수 있다.
+        financials = _compare_money(
+            request, resolved, settings, trial, targets, consider_revenue_loss
+        )
         return RecommendationReport(
             verdict="needs_extra_round",
             unassigned_count=len(targets),
             options=options,
             analyzed_seconds=round(time.perf_counter() - started, 3),
             optimization_run_id=optimization_run_id,
+            financials=financials,
         )
 
     options.append(RecommendationOption(

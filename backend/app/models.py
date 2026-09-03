@@ -62,6 +62,11 @@ class PassengerInput(LocationInput):
     dropoff_start: str | None = None
     dropoff_end: str | None = None
     wheelchair: bool = False
+    # 장기요양 등급(1~5). 수가가 등급마다 달라 재무 비교에 쓴다.
+    # 비워 두면 센터 기본 등급으로 본다.
+    care_grade: int | None = Field(default=None, ge=1, le=5)
+    # 센터가 계획하고 청구하는 이용시간. 비워 두면 센터 공통값(8시간)을 쓴다.
+    planned_service_hours: float | None = Field(default=None, gt=0, le=24)
     guardian_phone: str | None = Field(default=None, max_length=20)
     # 어르신 본인 휴대폰. 대표 연락처를 '본인'으로 두면 여기로 전화한다.
     passenger_phone: str | None = Field(default=None, max_length=20)
@@ -348,6 +353,50 @@ class RecommendationOption(BaseModel):
     resolves_count: int = 0
 
 
+class RevenueLossEntry(BaseModel):
+    """수가가 깎이는 어르신 한 분."""
+
+    passenger_id: str
+    name: str
+    care_grade: int
+    planned_hours: float
+    actual_hours: float
+    planned_band: str
+    actual_band: str
+    lost_won: int
+
+
+class ScenarioCostView(BaseModel):
+    """한 가지 운영 방식의 하루 비용."""
+
+    label: str
+    distance_km: float
+    fuel_won: int = 0
+    fixed_won: int = 0
+    revenue_loss_won: int = 0
+    total_won: int = 0
+    revenue_loss_items: list[RevenueLossEntry] = Field(default_factory=list)
+
+
+class FinancialComparison(BaseModel):
+    """3회차로 버티는 것과 차를 늘리는 것 중 어느 쪽이 싼가.
+
+    인건비는 넣지 않는다. 운전은 이미 급여가 나가는 요양보호사가 맡으므로
+    3회차를 돌아도 연장수당이나 신규 고용이 생기지 않는다.
+    """
+
+    # 수가 감소를 비용에 넣고 계산했는가
+    consider_revenue_loss: bool
+    scenario_a: ScenarioCostView
+    scenario_b: ScenarioCostView
+    # 어느 쪽을 권하는가. 판단할 수 없으면 None.
+    recommended: Literal["add_round", "add_vehicle"] | None = None
+    difference_won: int = 0
+    headline: str = ""
+    # 수가표에 없는 조합이 있어 판정을 보류한 경우 등
+    notes: list[str] = Field(default_factory=list)
+
+
 class RecommendationReport(BaseModel):
     """배차가 안 된 이유와, 어떻게 하면 되는지.
 
@@ -367,6 +416,8 @@ class RecommendationReport(BaseModel):
     analyzed_seconds: float = 0.0
     # 어느 계산에 대한 분석인지. 나중에 '제안을 받아들였나' 를 보려면 필요하다.
     optimization_run_id: str | None = None
+    # 3회차와 증차 중 어느 쪽이 싼가. 회차 추가가 가능할 때만 채워진다.
+    financials: FinancialComparison | None = None
 
 
 class RecommendRequest(BaseModel):
@@ -380,6 +431,10 @@ class RecommendRequest(BaseModel):
     request: OptimizeRequest
     unassigned_passenger_ids: list[str] = Field(default_factory=list)
     optimization_run_id: str | None = None
+    # 조기 하원에 따른 수가 감소를 비용에 넣을지.
+    # 기본은 넣는다. 조기 하원이 매출에 영향을 주는 것이 원칙이고,
+    # 보수적인 쪽이 기본이어야 한다.
+    consider_revenue_loss: bool = True
 
 
 class OptimizeResponse(BaseModel):
