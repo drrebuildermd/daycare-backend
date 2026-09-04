@@ -68,6 +68,9 @@ const emptyPassenger = () => ({
   dropoffStart: '',
   dropoffEnd: '',
   wheelchair: false,
+  // 재무 비교에 쓴다. 비우면 서버가 센터 기본값(4등급·8시간)으로 본다.
+  careGrade: '',
+  plannedServiceHours: '',
   guardianPhone: '', // 🚨 [신규 장착] 보호자 연락처 저장 공간 확보
   passengerPhone: '',
   // 기사님 📞 버튼이 누구에게 걸지. 기본은 보호자.
@@ -482,6 +485,8 @@ function AdminApp() {
         pickup_start: item.pickupStart,
         pickup_end: item.pickupEnd,
         wheelchair: item.wheelchair,
+        care_grade: (item.careGrade || '').trim() || null,
+        planned_service_hours: Number(item.plannedServiceHours) || null,
         dropoff_start: (item.dropoffStart || '').trim() || null,
         dropoff_end: (item.dropoffEnd || '').trim() || null,
         guardian_phone: (item.guardianPhone || '').trim(),

@@ -16,6 +16,8 @@ const COLUMN_ALIASES = {
   dropoffStart: ['dropoff_start', '하차 하한', '하원 하한', '하차시간 하한'],
   dropoffEnd: ['dropoff_end', '하차 상한', '하원 상한', '하차시간 상한'],
   wheelchair: ['wheelchair', '휠체어', '휠체어 여부'],
+  careGrade: ['care_grade', '장기요양등급', '등급', '요양등급'],
+  plannedServiceHours: ['planned_service_hours', '계획 이용시간', '이용시간', '계획이용시간'],
   guardianPhone: ['guardian_phone', '보호자 연락처', '보호자연락처', '연락처', '전화번호', '휴대폰'],
   // 어르신 본인 휴대폰. 대표 연락처를 '본인' 으로 두면 기사님이 여기로 건다.
   passengerPhone: ['passenger_phone', '어르신 전화번호', '어르신 연락처',
@@ -39,6 +41,27 @@ const excelTime = (value) => {
   return match ? `${match[1].padStart(2, '0')}:${match[2]}` : text;
 };
 
+// 등급 칸. 원장님이 '4', '4등급', '인지지원', '등급외' 처럼 여러 모양으로 적는다.
+// 못 알아보면 빈 값으로 두고 서버가 센터 기본값(4등급)으로 본다.
+const asGrade = (value) => {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  if (/인지/.test(text)) return 'cognitive';
+  if (/등급\s*외|등급외|해당\s*없음/.test(text)) return 'none';
+  const digit = text.match(/[1-5]/);
+  return digit ? digit[0] : '';
+};
+
+// 계획 이용시간. '8', '8시간', '8.5' 를 받는다. 숫자가 아니면 빈 값.
+const asHours = (value) => {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  const found = text.match(/[0-9]+(\.[0-9]+)?/);
+  if (!found) return '';
+  const hours = Number(found[0]);
+  return hours > 0 && hours <= 24 ? String(hours) : '';
+};
+
 const asBoolean = (value) => ['true', 'y', 'yes', '1', '예', '유', 'o'].includes(
   String(value ?? '').trim().toLowerCase(),
 );
@@ -53,6 +76,7 @@ const asBoolean = (value) => ['true', 'y', 'yes', '1', '예', '유', 'o'].includ
 const TEMPLATE_HEADERS = [
   '이름', '주소', '상세주소', '보호자 연락처', '어르신 전화번호',
   '픽업 하한', '픽업 상한', '하차 하한', '하차 상한', '휠체어',
+  '장기요양등급', '계획 이용시간',
 ];
 
 const TEMPLATE_SAMPLE = [
@@ -67,6 +91,8 @@ const TEMPLATE_SAMPLE = [
     '하차 하한': '',
     '하차 상한': '',
     휠체어: 'N',
+    장기요양등급: '4',
+    '계획 이용시간': '8',
   },
   {
     이름: '박온케어',
@@ -79,6 +105,8 @@ const TEMPLATE_SAMPLE = [
     '하차 하한': '16:00',
     '하차 상한': '16:40',
     휠체어: 'Y',
+    장기요양등급: '인지지원',
+    '계획 이용시간': '10',
   },
 ];
 
@@ -89,6 +117,7 @@ export async function downloadPassengerTemplate() {
   sheet['!cols'] = [
     { wch: 10 }, { wch: 32 }, { wch: 14 }, { wch: 16 }, { wch: 16 },
     { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 8 },
+    { wch: 14 }, { wch: 14 },
   ];
 
   const book = XLSX.utils.book_new();
@@ -159,6 +188,8 @@ export async function pickPassengerExcel() {
       dropoffStart: excelTime(getValue(row, COLUMN_ALIASES.dropoffStart)),
       dropoffEnd: excelTime(getValue(row, COLUMN_ALIASES.dropoffEnd)),
       wheelchair: asBoolean(getValue(row, COLUMN_ALIASES.wheelchair)),
+      careGrade: asGrade(getValue(row, COLUMN_ALIASES.careGrade)),
+      plannedServiceHours: asHours(getValue(row, COLUMN_ALIASES.plannedServiceHours)),
       guardianPhone: String(getValue(row, COLUMN_ALIASES.guardianPhone) ?? '').trim(),
       passengerPhone: String(getValue(row, COLUMN_ALIASES.passengerPhone) ?? '').trim(),
       latitude: String(getValue(row, COLUMN_ALIASES.latitude) ?? '').trim(),

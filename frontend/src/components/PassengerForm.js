@@ -309,6 +309,38 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
         onClose={() => setIsAddressModalOpen(false)}
       />
       
+      {/* 재무 비교에 쓰는 값. 비워 두면 센터 기본값(4등급·8시간)으로 계산한다. */}
+      <Text style={styles.label}>장기요양 등급</Text>
+      <View style={styles.gradeRow}>
+        {CARE_GRADES.map((grade) => {
+          const picked = (value.careGrade || '') === grade.value;
+          return (
+            <Pressable
+              key={grade.value}
+              style={[styles.gradeChip, picked && styles.gradeChipOn]}
+              onPress={() => set('careGrade', picked ? '' : grade.value)}
+            >
+              <Text style={[styles.gradeText, picked && styles.gradeTextOn]}>
+                {grade.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <Field
+        label="계획 이용시간 (시간)"
+        value={value.plannedServiceHours}
+        onChangeText={(text) =>
+          set('plannedServiceHours', text.replace(/[^0-9.]/g, '').slice(0, 4))
+        }
+        placeholder="예: 8"
+        keyboardType="decimal-pad"
+      />
+      <Text style={styles.gradeHint}>
+        센터가 계획하고 청구하는 하루 이용시간입니다. 비워 두면 8시간으로 봅니다.
+        {'\n'}3회차를 돌 때 이 시간이 줄어 수가 구간이 내려가는지 계산하는 데 씁니다.
+      </Text>
       <View style={styles.switchRow}>
         <View>
           <Text style={styles.switchTitle}>휠체어 이용</Text>
@@ -326,6 +358,15 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
 }
 
 const styles = StyleSheet.create({
+  gradeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
+  gradeChip: {
+    paddingHorizontal: 11, paddingVertical: 7, borderRadius: 999,
+    borderWidth: 1, borderColor: '#E4E7EC', backgroundColor: '#F8F9FB',
+  },
+  gradeChipOn: { borderColor: '#0BA38E', backgroundColor: '#E9F7EF' },
+  gradeText: { fontSize: 12, fontWeight: '700', color: '#667085' },
+  gradeTextOn: { color: '#07705F' },
+  gradeHint: { color: '#7C8D87', fontSize: 12, lineHeight: 18, marginBottom: 12, marginTop: -4 },
   attendanceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#F8F9FB', borderRadius: 12, padding: 12, marginBottom: 14 },
   attendanceLabel: { color: '#237B4B', fontWeight: '800', fontSize: 14 },
   absentLabel: { color: '#667085' },

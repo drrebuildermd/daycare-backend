@@ -57,7 +57,7 @@ class Settings(BaseSettings):
 
     # 등급이 적히지 않은 어르신에게 적용할 등급.
     # 현장에서 가장 흔한 것이 3~5등급이라 가운데를 기본으로 둔다.
-    default_care_grade: int = 4
+    default_care_grade: str = "4"
 
     # 장기요양 주야간보호 수가표. "등급:구간하한-구간상한" -> 1일 금액(원).
     #

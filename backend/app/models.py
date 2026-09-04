@@ -4,6 +4,8 @@ from typing import Annotated, Literal
 # 하원(outbound)은 댁으로 모셔다드리는 운행이다.
 # 기본값을 등원으로 두면 이 값을 모르는 구형 앱이 그대로 동작한다.
 TripType = Literal["inbound", "outbound"]
+# 장기요양 등급. 숫자 등급 외에 인지지원등급과 등급외가 현장에 있다.
+CareGrade = Literal["1", "2", "3", "4", "5", "cognitive", "none"]
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -62,9 +64,14 @@ class PassengerInput(LocationInput):
     dropoff_start: str | None = None
     dropoff_end: str | None = None
     wheelchair: bool = False
-    # 장기요양 등급(1~5). 수가가 등급마다 달라 재무 비교에 쓴다.
+    # 장기요양 등급. 수가가 등급마다 달라 재무 비교에 쓴다.
+    #
+    # "1"~"5"     등급별 수가가 있다
+    # "cognitive" 인지지원등급. 주야간보호만 이용할 수 있고 수가 체계가 다르다.
+    # "none"      등급외. 장기요양 급여 대상이 아니라 깎일 수가 자체가 없다.
+    #
     # 비워 두면 센터 기본 등급으로 본다.
-    care_grade: int | None = Field(default=None, ge=1, le=5)
+    care_grade: CareGrade | None = None
     # 센터가 계획하고 청구하는 이용시간. 비워 두면 센터 공통값(8시간)을 쓴다.
     planned_service_hours: float | None = Field(default=None, gt=0, le=24)
     guardian_phone: str | None = Field(default=None, max_length=20)
@@ -371,7 +378,7 @@ class RevenueLossEntry(BaseModel):
 
     passenger_id: str
     name: str
-    care_grade: int
+    care_grade: str
     planned_hours: float
     actual_hours: float
     planned_band: str

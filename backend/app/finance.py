@@ -60,13 +60,26 @@ def band_label(band: tuple[float, float] | None) -> str:
     return f"{low:g}~{high:g}시간"
 
 
+# 급여 대상이 아닌 등급. 깎일 수가가 없다.
+NO_BENEFIT_GRADE = "none"
+# 인지지원등급. 주야간보호만 이용할 수 있고 수가 체계가 다르다.
+# 표에 값이 들어오기 전까지는 '모름' 으로 다뤄 판정을 보류한다.
+COGNITIVE_GRADE = "cognitive"
+
+GRADE_LABEL = {
+    "1": "1등급", "2": "2등급", "3": "3등급", "4": "4등급", "5": "5등급",
+    COGNITIVE_GRADE: "인지지원등급",
+    NO_BENEFIT_GRADE: "등급외",
+}
+
+
 @dataclass
 class RevenueLossItem:
     """수가가 깎인 어르신 한 분."""
 
     passenger_id: str
     name: str
-    care_grade: int
+    care_grade: str
     planned_hours: float
     actual_hours: float
     planned_band: str
@@ -91,7 +104,7 @@ class ScenarioCost:
         return self.fuel_won + self.fixed_won + self.revenue_loss_won
 
 
-def rate_for(settings: Settings, grade: int, band: tuple[float, float] | None) -> int | None:
+def rate_for(settings: Settings, grade: str, band: tuple[float, float] | None) -> int | None:
     """그 등급, 그 구간의 하루 수가. 표에 없으면 None.
 
     None 은 0원이 아니라 '모른다' 는 뜻이다. 모르는 것을 0으로 두면 손실이
@@ -142,13 +155,19 @@ def revenue_loss(
         if planned_band == actual_band:
             continue
 
-        grade = passenger.care_grade or settings.default_care_grade
+        grade = str(passenger.care_grade or settings.default_care_grade)
+
+        # 등급외는 장기요양 급여 대상이 아니다. 깎일 수가가 없으므로
+        # 조기 하원해도 매출이 줄지 않는다. 모르는 것이 아니라 0원이다.
+        if grade == NO_BENEFIT_GRADE:
+            continue
+
         before = rate_for(settings, grade, planned_band)
         after = rate_for(settings, grade, actual_band)
 
         if before is None or after is None:
             unknown.append(
-                f"{passenger.name} 어르신({grade}등급 "
+                f"{passenger.name} 어르신({GRADE_LABEL.get(grade, grade)} "
                 f"{band_label(planned_band)}→{band_label(actual_band)})의 수가가 표에 없습니다."
             )
             continue

@@ -30,7 +30,7 @@ def check(label, ok, detail=""):
 S = get_settings()
 
 
-def person(pid, name, grade=4, planned=None):
+def person(pid, name, grade="4", planned=None):
     return PassengerInput.model_validate({
         "id": pid, "name": name, "address": f"주소{pid}",
         "latitude": 37.5, "longitude": 127.0,
@@ -62,11 +62,11 @@ print(f"   같은 40분: 여유 있는 분 {safe[0]:,}원 / 빠듯한 분 {tight
 print()
 print("=== 2. 구간 강등 금액이 표와 맞는가 ===")
 for grade, before, after, expected in (
-    (3, 11.0, 9.0, 67000 - 60000),
-    (4, 11.0, 9.0, 63000 - 57000),
-    (5, 11.0, 9.0, 60000 - 54000),
-    (4, 9.0, 7.0, 57000 - 45000),
-    (4, 7.0, 5.0, 45000 - 34000),
+    ("3", 11.0, 9.0, 67000 - 60000),
+    ("4", 11.0, 9.0, 63000 - 57000),
+    ("5", 11.0, 9.0, 60000 - 54000),
+    ("4", 9.0, 7.0, 57000 - 45000),
+    ("4", 7.0, 5.0, 45000 - 34000),
 ):
     got = revenue_loss({"p": before - after},
                        [person("p", "테스트", grade=grade, planned=before)], S)
@@ -77,8 +77,8 @@ for grade, before, after, expected in (
 print()
 print("=== 3. 수가표에 없으면 0원이 아니라 '모름' ===")
 print("   모르는 것을 0으로 두면 손실이 없는 것처럼 보여 잘못된 권고가 나간다.")
-check("1등급은 표에 없다", rate_for(S, 1, (10.0, 12.0)) is None)
-unknown = revenue_loss({"p": 2.0}, [person("p", "일등급", grade=1, planned=11.0)], S)
+check("1등급은 표에 없다", rate_for(S, "1", (10.0, 12.0)) is None)
+unknown = revenue_loss({"p": 2.0}, [person("p", "일등급", grade="1", planned=11.0)], S)
 check("금액에 더해지지 않는다", unknown[0] == 0, unknown[0])
 check("항목으로도 잡히지 않는다", len(unknown[1]) == 0)
 check("모른다고 알려 준다", len(unknown[2]) == 1, unknown[2])
@@ -193,6 +193,22 @@ check(f"센터 공통값은 {S.stay_hours}시간", S.stay_hours == 8.0)
 got2, items2, _ = revenue_loss({"y": 0.5}, [plain], S)
 # 8.0시간에서 30분 당기면 7.5시간 -> 6~8 구간으로 강등
 check("8시간에서 30분 당기면 구간이 내려간다", got2 == 57000 - 45000, f"{got2:,}원")
+
+
+print()
+print("=== 10-1. 등급외와 인지지원 ===")
+print("   등급외는 급여 대상이 아니라 깎일 수가가 없다. 모르는 것이 아니라 0원이다.")
+out_of_grade = revenue_loss({"z": 2.0}, [person("z", "등급외분", grade="none", planned=11.0)], S)
+check("등급외는 손실 0원", out_of_grade[0] == 0, out_of_grade[0])
+check("항목에 잡히지 않는다", len(out_of_grade[1]) == 0)
+check("'모른다' 고 하지 않는다", len(out_of_grade[2]) == 0, out_of_grade[2])
+
+cognitive = revenue_loss({"c": 2.0}, [person("c", "인지지원분", grade="cognitive", planned=11.0)], S)
+check("인지지원은 수가표가 없어 보류", cognitive[0] == 0 and len(cognitive[2]) == 1,
+      cognitive[2])
+check("사유에 '인지지원등급' 이라고 적힌다",
+      "인지지원등급" in cognitive[2][0], cognitive[2][0])
+print("   사유:", cognitive[2][0])
 
 
 print()
