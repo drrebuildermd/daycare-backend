@@ -50,8 +50,10 @@ export function checkRow(passenger, rowNumber) {
     );
   }
 
+  // 두 칸 모두 비워도 된다. 비우면 엔진이 수가를 지키는 선에서 정한다.
+  // 한쪽만 채우거나 형식이 틀린 것은 여전히 막는다. 그건 실수지 의도가 아니다.
   const pairs = [
-    ['픽업', passenger.pickupStart, passenger.pickupEnd, true],
+    ['픽업', passenger.pickupStart, passenger.pickupEnd, false],
     ['하차', passenger.dropoffStart, passenger.dropoffEnd, false],
   ];
   for (const [label, low, high, required] of pairs) {

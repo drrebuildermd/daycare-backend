@@ -455,6 +455,16 @@ def optimize_routes(
     distance_m, travel_minutes = _matrices(resolved, settings)
 
     # 물리 차량 한 대당 라우팅 차량 두 개(1·2회차)를 만든다.
+    # 원장님이 화면에서 정한 값이 서버 기본값을 이긴다.
+    # 센터마다 사정이 달라 코드에 박아 두면 안 되는 값들이다.
+    overrides = {}
+    if request.earliest_pickup:
+        overrides["earliest_pickup"] = request.earliest_pickup
+    if request.max_transit_minutes:
+        overrides["max_transit_minutes"] = request.max_transit_minutes
+    if overrides:
+        settings = settings.model_copy(update=overrides)
+
     rounds = tuple(range(1, trips_per_vehicle + 1))
     trip_specs = [(vehicle, round_number) for vehicle in vehicles for round_number in rounds]
 

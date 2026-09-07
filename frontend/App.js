@@ -168,6 +168,9 @@ function AdminApp() {
   const [isCenterAddressModalOpen, setIsCenterAddressModalOpen] = useState(false);
   // 하원 마감. 비워 두면 서버 기본값(17:00)을 쓴다.
   const [outboundDeadline, setOutboundDeadline] = useState('17:00');
+  // 시각을 비운 어르신을 엔진이 어디까지 자유롭게 배치할 수 있는지 정하는 울타리.
+  const [earliestPickup, setEarliestPickup] = useState('07:30');
+  const [maxTransitMinutes, setMaxTransitMinutes] = useState('80');
   const [pairRules, setPairRules] = useState([]);
   const [sending, setSending] = useState(false);
   const [focusVehicleId, setFocusVehicleId] = useState(null);
@@ -189,6 +192,8 @@ function AdminApp() {
           if (session.vehicles) setVehicles(session.vehicles);
           if (session.center) setCenter(session.center);
           if (session.outboundDeadline) setOutboundDeadline(session.outboundDeadline);
+          if (session.earliestPickup) setEarliestPickup(session.earliestPickup);
+          if (session.maxTransitMinutes) setMaxTransitMinutes(session.maxTransitMinutes);
           if (session.passengers) setPassengers(session.passengers);
           if (session.pairRules) setPairRules(session.pairRules);
           // v1 은 배차 결과를 result 하나로 들고 있었다. 그때는 등원뿐이었다.
@@ -421,8 +426,13 @@ function AdminApp() {
     if (active.length > hardPassengerCapacity) return `등록 차량으로는 3회차까지 돌려도 ${hardPassengerCapacity}명이 한계입니다. 차량을 늘리거나 명단을 나눠 주세요.`;
     for (const [index, passenger] of active.entries()) {
       if (!passenger.name.trim() || !passenger.address.trim()) return `${index + 1}번 어르신의 이름과 주소를 입력해 주세요.`;
-      if (!HHMM.test(passenger.pickupStart) || !HHMM.test(passenger.pickupEnd)) return `${passenger.name}님의 시간을 HH:MM 형식으로 입력해 주세요.`;
-      if (passenger.pickupStart > passenger.pickupEnd) return `${passenger.name}님의 픽업 하한이 상한보다 늦습니다.`;
+      // 픽업 시각은 비워도 된다. 비우면 엔진이 수가를 지키는 선에서 정한다.
+      // 한쪽만 채우거나 형식이 틀린 것은 여전히 막는다. 그건 실수지 의도가 아니다.
+      const hasPickup = (passenger.pickupStart || '') || (passenger.pickupEnd || '');
+      if (hasPickup) {
+        if (!HHMM.test(passenger.pickupStart) || !HHMM.test(passenger.pickupEnd)) return `${passenger.name}님의 픽업 시간을 HH:MM 형식으로 입력하시거나, 두 칸을 모두 비워 엔진에 맡겨 주세요.`;
+        if (passenger.pickupStart > passenger.pickupEnd) return `${passenger.name}님의 픽업 하한이 상한보다 늦습니다.`;
+      }
       // 하원 하차 시각은 비워 두면 서버가 등원 시각 + 8시간으로 채운다.
       // 그래서 넣은 경우에만 본다.
       const hasDropoff = (passenger.dropoffStart || '') && (passenger.dropoffEnd || '');
@@ -459,6 +469,8 @@ function AdminApp() {
       trip_type: tripType,
       center: asLocation(center),
       outbound_deadline: (outboundDeadline || '').trim() || null,
+      earliest_pickup: (earliestPickup || '').trim() || null,
+      max_transit_minutes: Number(maxTransitMinutes) || null,
       vehicles: vehicles.map((vehicle) => ({
         id: vehicle.id,
         vehicle_type: vehicle.vehicleType.trim(),
@@ -482,8 +494,8 @@ function AdminApp() {
         detail_address: (item.detailAddress || '').trim(),
         attending: item.attending !== false,
         attending_outbound: item.attendingOutbound !== false,
-        pickup_start: item.pickupStart,
-        pickup_end: item.pickupEnd,
+        pickup_start: (item.pickupStart || '').trim() || null,
+        pickup_end: (item.pickupEnd || '').trim() || null,
         wheelchair: item.wheelchair,
         care_grade: (item.careGrade || '').trim() || null,
         planned_service_hours: Number(item.plannedServiceHours) || null,
@@ -590,6 +602,8 @@ function AdminApp() {
           vehicles,
           center,
           outboundDeadline,
+          earliestPickup,
+          maxTransitMinutes,
           passengers,
           pairRules,
           result: response,
@@ -847,6 +861,34 @@ function AdminApp() {
                 <Text style={styles.deadlineHint}>
                   센터 차량은 이 시각까지 센터로 돌아옵니다.
                   {'\n'}차량마다 다르면 각 차량에서 따로 지정할 수 있습니다.
+                </Text>
+
+                {/* 어르신 시각을 비워 두면 엔진이 정한다. 그 자유도의 울타리다. */}
+                <Text style={styles.inputLabel}>가장 이른 픽업 시각</Text>
+                <TimeInput
+                  style={styles.input}
+                  value={earliestPickup}
+                  onChangeTime={setEarliestPickup}
+                  placeholder="07:30"
+                  placeholderTextColor="#98A2B3"
+                />
+                <Text style={styles.deadlineHint}>
+                  이 시각 전에는 어느 어르신도 모시러 가지 않습니다.
+                </Text>
+
+                <Text style={styles.inputLabel}>최대 탑승 시간 (분)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={maxTransitMinutes}
+                  onChangeText={(text) => setMaxTransitMinutes(text.replace(/[^0-9]/g, '').slice(0, 3))}
+                  placeholder="80"
+                  placeholderTextColor="#98A2B3"
+                  keyboardType="number-pad"
+                />
+                <Text style={styles.deadlineHint}>
+                  한 회차가 이보다 오래 걸리지 않도록 묶습니다.
+                  {'\n'}짧게 잡을수록 어르신이 차에 계시는 시간은 줄지만,
+                  외곽에 사시는 분이 배차에서 빠질 수 있습니다.
                 </Text>
               </View>
               <AddressSearch

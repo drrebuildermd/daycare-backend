@@ -50,11 +50,21 @@ const Trip = ({ trip, vehicle, center, completedStops, savingStops, onComplete }
             {stop.wheelchair && <Icon name="wheelchair" size={15} tint={color.textSecondary} />}
             <Text style={[styles.eta, completedAt && styles.completedText]}>{stop.estimated_pickup}</Text>
           </View>
+          {/* 이 시각을 누가 정했는가. 보호자가 요청한 시각과 엔진이 정한
+              시각은 통보할 때 말이 달라야 한다. */}
+          {stop.time_source === 'derived' && (
+            <View style={styles.engineBadge}>
+              <Icon name="excel" size={11} tint="#07705F" />
+              <Text style={styles.engineBadgeText}>엔진 최적 배정</Text>
+            </View>
+          )}
           <Text style={[styles.address, completedAt && styles.completedText]}>{stop.address}</Text>
           {!!stop.detail_address && (
             <Text style={[styles.detailAddress, completedAt && styles.completedText]}>{stop.detail_address}</Text>
           )}
-          <Text style={styles.window}>요청 {stop.requested_window}</Text>
+          <Text style={styles.window}>
+            {stop.time_source === 'derived' ? '가능 범위' : '요청'} {stop.requested_window}
+          </Text>
           {completedAt && <Text style={styles.completedAt}>탑승 완료 · {formatCompletionTime(completedAt)}</Text>}
         </View>
         <View style={styles.actionColumn}>
@@ -439,6 +449,12 @@ export default function VehicleResults({
 
 const styles = StyleSheet.create({
   // 놓치면 안 되는 경고다. 결과 카드보다 먼저, 더 눈에 띄게 둔다.
+  engineBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3, alignSelf: 'flex-start',
+    backgroundColor: '#E6F7F4', borderRadius: 999,
+    paddingHorizontal: 7, paddingVertical: 2, marginTop: 3,
+  },
+  engineBadgeText: { color: '#07705F', fontSize: 10, fontWeight: '800' },
   moneyCard: {
     marginTop: 12, backgroundColor: '#FFFFFF', borderRadius: 12,
     borderWidth: 1, borderColor: '#B7E4DA', padding: 14,

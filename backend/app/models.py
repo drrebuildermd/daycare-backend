@@ -225,6 +225,10 @@ class OptimizeRequest(BaseModel):
     # 센터 공통 하원 마감 시각. 비워 두면 서버 기본값을 쓴다.
     # 차량에 적힌 값이 이것보다 우선한다.
     outbound_deadline: str | None = None
+    # 아무리 일러도 이 시각 전에는 모시러 가지 않는다.
+    earliest_pickup: str | None = None
+    # 한 회차가 걸리는 전체 시간의 상한(분).
+    max_transit_minutes: int | None = Field(default=None, ge=20, le=300)
     # 같은 차·같은 회차에 함께 태우면 안 되는 조합 (기피)
     forbidden_pairs: list[PairRule] = Field(default_factory=list)
     # 반드시 같은 차·같은 회차에 함께 태워야 하는 조합 (짝꿍)

@@ -66,6 +66,8 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
   const autoStart = shiftTime(value.pickupStart);
   const autoEnd = shiftTime(value.pickupEnd);
   const dropoffBlank = !(value.dropoffStart || '').trim() && !(value.dropoffEnd || '').trim();
+  // 비워 두면 엔진이 정한다. 그 사실을 칸 밑에 적어 둬야 원장님이 안다.
+  const pickupBlank = !(value.pickupStart || '').trim() && !(value.pickupEnd || '').trim();
   const callsSelf = value.primaryContact === 'self';
 
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
@@ -141,6 +143,12 @@ export default function PassengerForm({ value, index, onChange, onRemove }) {
               />
             </View>
           </View>
+          {pickupBlank && (
+            <Text style={styles.autoHint}>
+              비워두면 엔진이 수가를 방어하는 최적 시간을 자동 배정합니다.
+              {'\n'}계획 이용시간을 채울 수 있는 마지노선 안에서만 정합니다.
+            </Text>
+          )}
         </View>
       )}
 

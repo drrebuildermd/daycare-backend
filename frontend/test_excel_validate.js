@@ -79,10 +79,11 @@ check('형식이 틀리면 잡는다', badFormat.length === 1, JSON.stringify(ba
 check('예시를 보여 준다', badFormat[0].includes('08:30'), badFormat[0]);
 console.log('   문구:', badFormat[0]);
 
+// v4.1 부터 시각은 비워도 된다. 비우면 엔진이 수가를 지키는 선에서 정한다.
+// 한쪽만 채우거나 형식이 틀린 것은 여전히 막는다. 그건 실수지 의도가 아니다.
 const missingPickup = checkRow(row({ name: '무시간', pickupStart: '', pickupEnd: '' }), 9);
-check('픽업 시간이 아예 없으면 잡는다', missingPickup.length === 1,
-  JSON.stringify(missingPickup));
-console.log('   문구:', missingPickup[0]);
+check('픽업 시간을 둘 다 비우면 통과한다 (엔진이 정한다)',
+  missingPickup.length === 0, JSON.stringify(missingPickup));
 
 console.log('');
 console.log('=== 5. 하차 시각도 같은 규칙으로 본다 ===');
@@ -97,7 +98,8 @@ check('하차 한쪽만 채우면 잡는다', halfDropoff.length === 1, JSON.str
 console.log('');
 console.log('=== 6. 한 줄에 여러 문제가 있으면 다 알려 준다 ===');
 const messy = checkRow({ name: '', address: '', pickupStart: '', pickupEnd: '' }, 12);
-check('이름·주소·시간 세 건을 모두 잡는다', messy.length === 3, JSON.stringify(messy));
+check('이름·주소 두 건을 잡는다 (시각은 비워도 되므로 셋이 아니다)',
+  messy.length === 2, JSON.stringify(messy));
 check('모두 같은 줄 번호를 가리킨다',
   messy.every((m) => m.includes('12번째 줄')), JSON.stringify(messy));
 
@@ -109,7 +111,7 @@ const sheet = [
   [row({ name: '이정상' }), 3],
   [row({ name: '박주소없음', address: '' }), 4],
   [row({ name: '최시간역전', pickupStart: '09:00', pickupEnd: '08:00' }), 5],
-  [row({ name: '정한쪽만', pickupEnd: '' }), 6],
+  [row({ name: '정한쪽만', pickupEnd: '' }), 6],   // 한쪽만 채움 = 여전히 오류
   [row({ name: '' }), 7],
 ];
 const all = sheet.flatMap(([data, n]) => checkRow(data, n));
@@ -117,6 +119,21 @@ check('문제가 정확히 4건 잡힌다', all.length === 4, JSON.stringify(all
 check('정상인 두 줄은 걸리지 않는다',
   !all.some((m) => m.includes('김정상') || m.includes('이정상')), JSON.stringify(all));
 for (const message of all) console.log('   ·', message);
+
+console.log('');
+console.log('=== 7-1. 시각을 비운 줄은 통과한다 (v4.1) ===');
+const blankTimes = checkRow({
+  name: '자동배정', address: '창원시 의창구 중앙대로 100',
+  pickupStart: '', pickupEnd: '', dropoffStart: '', dropoffEnd: '',
+}, 4);
+check('네 칸을 모두 비워도 문제 없음', blankTimes.length === 0, JSON.stringify(blankTimes));
+
+const halfBlank = checkRow({
+  name: '반만적음', address: '창원시 의창구 중앙대로 100',
+  pickupStart: '08:00', pickupEnd: '', dropoffStart: '', dropoffEnd: '',
+}, 5);
+check('한쪽만 적으면 여전히 잡는다', halfBlank.length === 1, JSON.stringify(halfBlank));
+console.log('   문구:', halfBlank[0]);
 
 console.log('');
 console.log('=== 8. 주소 정밀도 — 통과해야 하는 것 ===');
