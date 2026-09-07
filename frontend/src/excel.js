@@ -81,8 +81,8 @@ const TEMPLATE_HEADERS = [
 
 const TEMPLATE_SAMPLE = [
   {
-    이름: '김마중',
-    주소: '창원시 의창구 중앙대로 100',
+    이름: '(예시) 김마중 — 이 줄은 지우고 쓰세요',
+    주소: '경남 창원시 성산구 중앙대로 151',
     상세주소: '101동 1502호',
     '보호자 연락처': '010-1234-5678',
     '어르신 전화번호': '010-9876-5432',
@@ -95,8 +95,8 @@ const TEMPLATE_SAMPLE = [
     '계획 이용시간': '8',
   },
   {
-    이름: '박온케어',
-    주소: '창원시 성산구 원이대로 200',
+    이름: '(예시) 박온케어 — 이 줄은 지우고 쓰세요',
+    주소: '경남 창원시 성산구 원이대로 579번길 13',
     상세주소: '',
     '보호자 연락처': '010-2345-6789',
     '어르신 전화번호': '',
@@ -181,7 +181,9 @@ export async function pickPassengerExcel() {
       localId: `${Date.now()}-${index}`,
       id: String(getValue(row, COLUMN_ALIASES.id) || `P${String(index + 1).padStart(3, '0')}`),
       name: String(getValue(row, COLUMN_ALIASES.name) ?? '').trim(),
-      address: String(getValue(row, COLUMN_ALIASES.address) ?? '').trim(),
+      // 엑셀에서 Alt+Enter 로 줄을 나눠 적으시는 경우가 있다.
+      // 앞뒤를 떼고 가운데 공백·개행·탭도 한 칸으로 만든다.
+      address: String(getValue(row, COLUMN_ALIASES.address) ?? '').split(/\s+/).join(' ').trim(),
       detailAddress: String(getValue(row, COLUMN_ALIASES.detailAddress) ?? '').trim(),
       pickupStart: excelTime(getValue(row, COLUMN_ALIASES.pickupStart)),
       pickupEnd: excelTime(getValue(row, COLUMN_ALIASES.pickupEnd)),
