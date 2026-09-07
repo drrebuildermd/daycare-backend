@@ -58,8 +58,12 @@ class PassengerInput(LocationInput):
     # 등원과 하원의 탑승 여부를 따로 둔다.
     attending: bool = True
     attending_outbound: bool = True
-    pickup_start: str
-    pickup_end: str
+    # 비워 두면 엔진이 정한다. 원장님이 적으면 그 값이 언제나 이긴다.
+    #
+    # 현장에서는 보호자 희망 시간을 맞추기보다, 센터가 효율적인 동선을
+    # 짜고 그 시각을 통보하는 쪽이 실제 운영 방식이다.
+    pickup_start: str | None = None
+    pickup_end: str | None = None
     # 하원 희망 시각. 비워두면 센터 공통 기본값을 서버가 채운다.
     dropoff_start: str | None = None
     dropoff_end: str | None = None
@@ -84,8 +88,10 @@ class PassengerInput(LocationInput):
 
     @field_validator("pickup_start", "pickup_end")
     @classmethod
-    def validate_time(cls, value: str) -> str:
-        parse_hhmm(value)
+    def validate_time(cls, value: str | None) -> str | None:
+        # 비워 두는 것이 허용된다. 적었으면 형식은 맞아야 한다.
+        if value:
+            parse_hhmm(value)
         return value
 
     @field_validator("dropoff_start", "dropoff_end")
@@ -98,8 +104,10 @@ class PassengerInput(LocationInput):
 
     @model_validator(mode="after")
     def validate_window(self):
-        if parse_hhmm(self.pickup_start) > parse_hhmm(self.pickup_end):
-            raise ValueError("픽업 하한 시간은 상한 시간보다 늦을 수 없습니다.")
+        # 한쪽만 적으면 순서를 따질 수 없다. 둘 다 있을 때만 본다.
+        if self.pickup_start and self.pickup_end:
+            if parse_hhmm(self.pickup_start) > parse_hhmm(self.pickup_end):
+                raise ValueError("픽업 하한 시간은 상한 시간보다 늦을 수 없습니다.")
         if self.dropoff_start and self.dropoff_end:
             if parse_hhmm(self.dropoff_start) > parse_hhmm(self.dropoff_end):
                 raise ValueError("하원 하한 시간은 상한 시간보다 늦을 수 없습니다.")
@@ -117,12 +125,15 @@ class PassengerInput(LocationInput):
         한 시각으로 묶으면 일찍 오신 분이 8시간을 넘겨 머물게 된다.
 
         하한과 상한을 따로 본다. 한쪽만 적어둔 경우에도 나머지가 채워진다.
+        비워 둔 칸은 None 으로 돌려준다. 엔진이 대신 정한다는 뜻이다.
         """
         if trip_type != "outbound":
             return (self.pickup_start, self.pickup_end)
         return (
-            self.dropoff_start or shift_hhmm(self.pickup_start, stay_minutes),
-            self.dropoff_end or shift_hhmm(self.pickup_end, stay_minutes),
+            self.dropoff_start
+            or (shift_hhmm(self.pickup_start, stay_minutes) if self.pickup_start else None),
+            self.dropoff_end
+            or (shift_hhmm(self.pickup_end, stay_minutes) if self.pickup_end else None),
         )
 
 
@@ -241,6 +252,11 @@ class OptimizeRequest(BaseModel):
 
 
 class StopResult(BaseModel):
+    # 이 시각을 누가 정했는가.
+    #   declared — 원장님이 명단에 적어 둔 시각
+    #   derived  — 비어 있어서 엔진이 정한 시각
+    # 통보 문자를 보낼 때 원장님이 이 둘을 구분하실 수 있어야 한다.
+    time_source: Literal["declared", "derived"] = "declared"
     sequence: int
     passenger_id: str
     name: str

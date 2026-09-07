@@ -198,6 +198,76 @@ def deadline_of(vehicle, settings: Settings, center_default: str | None = None) 
         return None
 
 
+def _window_label(window: tuple[int, int]) -> str:
+    low, high = window
+    return f"{format_hhmm(low)}~{format_hhmm(high)}"
+
+
+def resolve_window(
+    passenger,
+    trip_type: str,
+    stay_minutes: int,
+    settings: Settings,
+    deadline_minutes: int | None,
+) -> tuple[int, int, str, bool]:
+    """이 어르신을 언제 태울 수 있는가.
+
+    (하한, 상한, 누가 정했는가, 설정이 서로 모순인가)
+
+    원장님이 적어 둔 시각이 있으면 그대로 쓴다. 언제나 그 값이 이긴다.
+
+    비어 있으면 엔진이 정한다. 다만 무한정 여는 것이 아니라 수가를 지키는
+    선까지만 연다.
+
+      등원 — 이 어르신이 계획 이용시간을 채우려면 늦어도 몇 시까지는 센터에
+             도착해야 하는가를 역산한다.
+                마지노선 = 하원 마감 − 계획 이용시간 − 안전 여유
+                예) 17:00 − 8시간 − 15분 = 08:45
+
+             안전 여유를 두는 이유는 수가가 계단이기 때문이다. 마지노선에
+             딱 맞추면 이용시간이 정확히 8시간이 되어, 길이 막혀 5분만
+             늦어도 구간이 내려가고 수가가 깎인다.
+
+      하원 — 가장 이른 픽업에 온 분이라도 계획 이용시간은 채우고 나가야 한다.
+                하한 = 가장 이른 픽업 + 계획 이용시간
+                상한 = 하원 마감
+    """
+    declared_start, declared_end = passenger.window(trip_type, stay_minutes)
+    if declared_start and declared_end:
+        return parse_hhmm(declared_start), parse_hhmm(declared_end), "declared", False
+
+    earliest = parse_hhmm(settings.earliest_pickup)
+    planned_minutes = round(
+        (passenger.planned_service_hours or settings.stay_hours) * 60
+    )
+    # 마감이 없으면 역산할 기준이 없다. 하루 전체를 열되 이른 시각은 막는다.
+    limit = deadline_minutes if deadline_minutes is not None else 24 * 60 - 1
+
+    if trip_type == "outbound":
+        low = min(earliest + planned_minutes, limit)
+        high = limit
+    else:
+        low = earliest
+        high = limit - planned_minutes - settings.deadline_safety_margin_minutes
+
+    # 한쪽만 적어 두신 경우에는 그쪽을 존중한다.
+    if declared_start:
+        low = parse_hhmm(declared_start)
+    if declared_end:
+        high = parse_hhmm(declared_end)
+
+    # 역산이 뒤집히는 경우가 있다. 계획 이용시간이 (마감 - 가장 이른 픽업)
+    # 보다 길면 아무리 일찍 모셔도 그 시간을 채울 수 없다.
+    #
+    # 이때 조용히 한 점으로 뭉개면 그 어르신은 이유도 모른 채 배차 불가가 된다.
+    # 창은 최소한으로 열어 두고, 부르는 쪽이 원장님께 사정을 알리게 한다.
+    conflict = high < low
+    if conflict:
+        high = low
+    source = "declared" if (declared_start or declared_end) else "derived"
+    return low, high, source, conflict
+
+
 def trip_endpoints(
     home_node: int,
     round_number: int,
@@ -420,13 +490,31 @@ def optimize_routes(
     time_dimension = routing.GetDimensionOrDie("Time")
     time_dimension.SetGlobalSpanCostCoefficient(TIME_SPAN_COEFFICIENT)
 
+    # 차량마다 마감이 다를 수 있다. 역산에는 가장 이른 마감을 쓴다.
+    # 어느 차에 실릴지 모르는 상태에서 정해야 하므로 가장 빡빡한 쪽에 맞춘다.
+    deadlines = [
+        spec.deadline_minutes for spec in vehicles if spec.deadline_minutes is not None
+    ]
+    tightest_deadline = min(deadlines) if deadlines else None
+
     passenger_windows: dict[str, tuple[int, int]] = {}
+    time_sources: dict[str, str] = {}
+    impossible_windows: list[str] = []
+    derived_nodes: list[tuple[int, int]] = []
     for node, passenger in enumerate(request.passengers, start=1):
         index = manager.NodeToIndex(node)
-        window_start, window_end = passenger.window(trip_type, stay_minutes)
-        low, high = parse_hhmm(window_start), parse_hhmm(window_end)
+        low, high, source, conflict = resolve_window(
+            passenger, trip_type, stay_minutes, settings, tightest_deadline
+        )
+        if conflict:
+            impossible_windows.append(passenger.name)
         passenger_windows[passenger_ids[node - 1]] = (low, high)
+        time_sources[passenger_ids[node - 1]] = source
         time_dimension.CumulVar(index).SetRange(low, high)
+        if source == "derived" and trip_type != "outbound":
+            # 등원은 '센터에 몇 시까지 도착하는가' 가 기준이다. 태우는 시각을
+            # 묶는 것만으로는 부족해서 아래에서 회차 도착 시각도 묶는다.
+            derived_nodes.append((node, high))
 
     for trip_index in range(len(trip_specs)):
         start_index = routing.Start(trip_index)
@@ -545,6 +633,32 @@ def optimize_routes(
                     )
                     solver.Add(on_this_trip <= dropped_in_time)
 
+    # 한 회차가 너무 길어지지 않게 묶는다.
+    #
+    # 시각을 비워 두면 솔버는 거리만 보고 답을 고른다. 그러면 차 한 대로
+    # 온 동네를 도는 것이 싸 보이고, 맨 처음 타신 분이 두 시간을 차에 계신다.
+    #
+    # 회차 전체 길이를 묶으면 그 회차에 타신 어떤 분도 그보다 오래 타실 수
+    # 없다. 개인별로 재는 것보다 조금 보수적이지만 상한은 확실히 지켜진다.
+    for trip_index in range(len(trip_specs)):
+        time_dimension.SetSpanUpperBoundForVehicle(
+            settings.max_transit_minutes, trip_index
+        )
+
+    # 등원에서 엔진이 시각을 정한 어르신은 '센터에 언제 도착하는가' 가
+    # 곧 이용시간의 시작이다. 태우는 시각만 묶으면 센터까지 한참 더 도는
+    # 경로가 나와도 막지 못한다. 그래서 회차의 도착 시각도 함께 묶는다.
+    for node, latest_arrival in derived_nodes:
+        node_index = manager.NodeToIndex(node)
+        for trip_index in range(len(trip_specs)):
+            on_this_trip = solver.IsEqualCstVar(
+                routing.VehicleVar(node_index), trip_index
+            )
+            arrives_in_time = solver.IsLessOrEqualCstVar(
+                time_dimension.CumulVar(routing.End(trip_index)), latest_arrival
+            )
+            solver.Add(on_this_trip <= arrives_in_time)
+
     # 동승 규칙. VehicleVar는 '어느 운행(차량×회차)에 실렸는가'를 가리키므로,
     # 같으면 같은 차에 같은 회차로 함께 탄다는 뜻이다.
     # 회차가 다르면 차 안에서 마주치지 않으므로 '동승'으로 보지 않는다.
@@ -648,8 +762,9 @@ def optimize_routes(
                             latitude=location.latitude,
                             longitude=location.longitude,
                             wheelchair=passenger.wheelchair,
-                            requested_window="{}~{}".format(
-                                *passenger.window(trip_type, stay_minutes)
+                            time_source=time_sources[passenger_ids[node - 1]],
+                            requested_window=_window_label(
+                                passenger_windows[passenger_ids[node - 1]]
                             ),
                             estimated_pickup=format_hhmm(pickup_minute),
                             kakao_navi_url=_kakao_navi_url(location),
@@ -754,6 +869,17 @@ def optimize_routes(
         "모든 예상 시각은 요청 시간창 안에 있으며 차량별 운행은 최대 "
         f"{trips_per_vehicle}회입니다.",
     ]
+
+    if impossible_windows:
+        names = ", ".join(impossible_windows[:3])
+        more = f" 외 {len(impossible_windows) - 3}명" if len(impossible_windows) > 3 else ""
+        notices.insert(
+            0,
+            f"{names}{more} 어르신은 계획 이용시간을 채울 수 없는 설정입니다. "
+            f"가장 이른 픽업({settings.earliest_pickup})부터 하원 마감까지의 시간이 "
+            "계획 이용시간보다 짧습니다. 마감을 늦추거나 계획 이용시간을 줄여 주세요."
+        )
+
     self_drive = [v.plate_number for v in vehicles if v.start_node != 0]
     if self_drive:
         plates = ", ".join(self_drive)
@@ -794,8 +920,8 @@ def optimize_routes(
             UnassignedPassenger(
                 passenger_id=passenger_ids[node - 1],
                 name=passenger.name,
-                requested_window="{}~{}".format(
-                    *passenger.window(trip_type, stay_minutes)
+                requested_window=_window_label(
+                    passenger_windows[passenger_ids[node - 1]]
                 ),
                 reason="wheelchair" if blocked_by_lift else "capacity",
                 wheelchair=passenger.wheelchair,
