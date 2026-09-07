@@ -10,6 +10,19 @@ import { Pressable, StyleSheet, Switch, View, TouchableOpacity } from 'react-nat
 import AddressSearch from './AddressSearch';
 import Accordion from './Accordion';
 
+// 장기요양 등급. 숫자 등급 외에 인지지원등급과 등급외가 현장에 있다.
+//   인지지원 — 주야간보호만 이용할 수 있고 수가 체계가 다르다
+//   등급외   — 장기요양 급여 대상이 아니라 깎일 수가 자체가 없다
+const CARE_GRADES = [
+  { value: '1', label: '1등급' },
+  { value: '2', label: '2등급' },
+  { value: '3', label: '3등급' },
+  { value: '4', label: '4등급' },
+  { value: '5', label: '5등급' },
+  { value: 'cognitive', label: '인지지원' },
+  { value: 'none', label: '등급외' },
+];
+
 const Field = ({ label, ...props }) => (
   <View style={styles.field}>
     <Text style={styles.label}>{label}</Text>

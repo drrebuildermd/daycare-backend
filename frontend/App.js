@@ -783,6 +783,10 @@ function AdminApp() {
 
         {/* 등원과 하원은 명단도 동선도 다르다. 지금 무엇을 짜고 있는지
             어느 탭에 있든 한눈에 보여야 한다. */}
+        {/* 차량은 등원이든 하원이든 같은 차다. 차량 탭에서 방향을 고르게 하면
+            "이 차는 등원용인가" 라는 없는 구분을 만들어 낸다.
+            방향이 실제로 의미를 갖는 대상자·관제 화면에서만 보여 준다. */}
+        {screen !== 'vehicles' && (
         <View style={styles.tripToggle}>
           {[TRIP_INBOUND, TRIP_OUTBOUND].map((value) => {
             const active = tripType === value;
@@ -804,6 +808,7 @@ function AdminApp() {
             );
           })}
         </View>
+        )}
 
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {screen === 'vehicles' ? (
