@@ -17,7 +17,7 @@ const code = babel.transformSync(fs.readFileSync('src/excelValidate.js', 'utf8')
 }).code;
 const mod = { exports: {} };
 new Function('require', 'module', 'exports', code)(require, mod, mod.exports);
-const { checkRow, isAddressPrecise } = mod.exports;
+const { checkRow, isAddressPrecise, vagueAddresses } = mod.exports;
 
 const failures = [];
 const check = (label, ok, detail) => {
@@ -173,15 +173,29 @@ for (const [address, why] of BAD) {
 }
 
 console.log('');
-console.log('=== 10. 포괄 주소 문구 ===');
-const vague = checkRow(row({ name: '이대충', address: '창원시' }), 3);
-check('한 건 잡힌다', vague.length === 1, JSON.stringify(vague));
-check('줄 번호와 이름이 들어간다',
-  vague[0].includes('3번째 줄') && vague[0].includes('이대충'), vague[0]);
-check('무엇을 넣어야 하는지 말한다',
-  vague[0].includes('동/로/길') && vague[0].includes('번지'), vague[0]);
-check('입력한 값을 되보여 준다', vague[0].includes('창원시'), vague[0]);
-console.log('   문구:', vague[0]);
+console.log('=== 10. 간략한 주소는 막지 않고 알리기만 한다 ===');
+// 서버가 주소 검색에 실패하면 키워드 검색으로 한 번 더 찾는다. 그래서
+// '창원시청', '용지아이파크' 같은 건물명도 정상 배차된다.
+// 여기서 막으면 서버가 처리할 수 있는 것을 못 올리게 된다.
+const vagueRow = checkRow(row({ name: '이대충', address: '창원시' }), 3);
+check('간략한 주소만으로는 업로드가 막히지 않는다', vagueRow.length === 0,
+  JSON.stringify(vagueRow));
+
+const buildingRow = checkRow(row({ name: '건물명', address: '창원 용지아이파크' }), 4);
+check('건물명 주소도 막지 않는다 (서버가 찾는다)', buildingRow.length === 0,
+  JSON.stringify(buildingRow));
+
+const flagged = vagueAddresses([
+  { name: '정확한분', address: '경남 창원시 성산구 중앙대로 151' },
+  { name: '이대충', address: '창원시' },
+  { name: '건물명', address: '창원 용지아이파크' },
+]);
+check('간략한 분만 골라낸다', flagged.length === 2, JSON.stringify(flagged));
+check('정확한 주소는 빠진다', !flagged.some((v) => v.name === '정확한분'));
+check('이름과 주소를 함께 준다',
+  flagged[0].name === '이대충' && flagged[0].address === '창원시',
+  JSON.stringify(flagged[0]));
+console.log('   경고 대상:', flagged.map((v) => `${v.name}(${v.address})`).join(', '));
 
 console.log('');
 if (failures.length) {

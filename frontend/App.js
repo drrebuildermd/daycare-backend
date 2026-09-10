@@ -1,3 +1,4 @@
+import notify from './src/ui/notify';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -45,6 +46,7 @@ import PassengerForm from './src/components/PassengerForm';
 import VehicleForm from './src/components/VehicleForm';
 import VehicleResults from './src/components/VehicleResults';
 import { downloadPassengerTemplate, pickPassengerExcel } from './src/excel';
+import { vagueAddresses } from './src/excelValidate';
 import AddressSearch from './src/components/AddressSearch';
 import PairRuleEditor from './src/components/PairRuleEditor';
 import SummaryBar from './src/components/SummaryBar';
@@ -246,7 +248,7 @@ function AdminApp() {
       const today = await fetchTodayDispatch();
       if (today.result) setResult(today.result);
     } catch (error) {
-      Alert.alert('배차 정보를 불러오지 못했습니다', error.message);
+      notify('배차 정보를 불러오지 못했습니다', error.message);
     }
   }), []);
 
@@ -371,15 +373,25 @@ function AdminApp() {
       setPassengers(imported.passengers);
       setExcelName(imported.fileName);
       const wheelchairs = imported.passengers.filter((item) => item.wheelchair).length;
-      Alert.alert(
+      // 주소가 간략한 분은 막지 않고 알리기만 한다. 서버가 건물명도 찾지만,
+      // '창원시' 처럼 시 이름만 있으면 시청 좌표가 나온다. 그건 실패로
+      // 알려주지 않는 종류의 실수라 눈에 띄게 해야 한다.
+      const vague = vagueAddresses(imported.passengers);
+      const vagueNote = vague.length
+        ? `\n\n주소가 간략한 ${vague.length}분은 위치가 부정확할 수 있습니다.\n`
+          + vague.slice(0, 5).map((v) => `· ${v.name} — ${v.address}`).join('\n')
+          + (vague.length > 5 ? `\n... 외 ${vague.length - 5}분` : '')
+        : '';
+      notify(
         '불러오기 완료',
         `${imported.passengers.length}명을 불러왔습니다.`
-        + (wheelchairs ? `\n휠체어 이용 ${wheelchairs}명이 포함되어 있습니다.` : ''),
+        + (wheelchairs ? `\n휠체어 이용 ${wheelchairs}명이 포함되어 있습니다.` : '')
+        + vagueNote,
       );
     } catch (error) {
       // 어느 줄이 왜 잘못됐는지 그대로 보여 준다. 원장님이 엑셀에서
       // 바로 찾아 고치실 수 있어야 한다.
-      Alert.alert('엑셀을 불러오지 못했습니다', error.message);
+      notify('엑셀을 불러오지 못했습니다', error.message);
     } finally {
       setExcelBusy(false);
     }
@@ -390,10 +402,10 @@ function AdminApp() {
     try {
       const saved = await downloadPassengerTemplate();
       if (!saved.shared) {
-        Alert.alert('양식을 만들었습니다', `저장 위치: ${saved.path}`);
+        notify('양식을 만들었습니다', `저장 위치: ${saved.path}`);
       }
     } catch (error) {
-      Alert.alert('양식을 만들지 못했습니다', error.message);
+      notify('양식을 만들지 못했습니다', error.message);
     } finally {
       setExcelBusy(false);
     }
@@ -531,7 +543,7 @@ function AdminApp() {
       );
       setAdvice(report);
     } catch (error) {
-      Alert.alert('대안 분석 실패', error.message || '잠시 후 다시 시도해 주세요.');
+      notify('대안 분석 실패', error.message || '잠시 후 다시 시도해 주세요.');
     } finally {
       setAdvising(false);
     }
@@ -552,7 +564,7 @@ function AdminApp() {
       );
       setAdvice(report);
     } catch (error) {
-      Alert.alert('다시 계산하지 못했습니다', error.message || '잠시 후 다시 시도해 주세요.');
+      notify('다시 계산하지 못했습니다', error.message || '잠시 후 다시 시도해 주세요.');
     } finally {
       setAdvising(false);
     }
@@ -573,7 +585,7 @@ function AdminApp() {
         : { ...passenger, pickupStart: low, pickupEnd: high };
     }));
     setAdvice(null);
-    Alert.alert(
+    notify(
       '시간을 수정했습니다',
       `${actions.length}분의 희망 시각을 바꿨습니다.\n`
       + '[최적 배차 계산하기] 를 다시 눌러 주세요.',
@@ -583,7 +595,7 @@ function AdminApp() {
 
   const submit = async () => {
     const message = validate();
-    if (message) return Alert.alert('입력 확인', message);
+    if (message) return notify('입력 확인', message);
     setLoading(true);
     try {
       const response = await optimizeRoutes(buildPayload());
@@ -609,10 +621,10 @@ function AdminApp() {
           result: response,
         }));
       } catch (_) {
-        Alert.alert('로컬 복원 저장 실패', '현재 배차는 사용할 수 있지만 앱 재실행 시 자동 복원되지 않을 수 있습니다.');
+        notify('로컬 복원 저장 실패', '현재 배차는 사용할 수 있지만 앱 재실행 시 자동 복원되지 않을 수 있습니다.');
       }
     } catch (error) {
-      Alert.alert('배차 최적화 실패', error.message);
+      notify('배차 최적화 실패', error.message);
     } finally {
       setLoading(false);
     }
@@ -647,13 +659,13 @@ function AdminApp() {
       // 문자 발송 결과를 기사님께 알린다.
       // 전에는 발송이 실패해도 화면상 성공으로 보여, 보호자에게 갔다고 오해할 수 있었다.
       if (record.sms_sent === false) {
-        Alert.alert(
+        notify(
           '탑승 완료 (문자 미발송)',
           `${stop.name} 어르신 기록은 저장했습니다.\n\n문자가 발송되지 않았습니다: ${record.sms_message || '사유 불명'}`,
         );
       }
     } catch (error) {
-      Alert.alert('탑승 완료 저장 실패', error.message);
+      notify('탑승 완료 저장 실패', error.message);
     } finally {
       setSavingStops((current) => {
         const next = { ...current };
@@ -678,12 +690,12 @@ function AdminApp() {
         lines.join('\n') || '전송할 차량이 없습니다.',
         ...(smsLines.length ? ['', '── 문자 ──', ...smsLines.map((line) => `· ${line}`)] : []),
       ].join('\n');
-      Alert.alert(
+      notify(
         outcome.sent > 0 ? `${outcome.sent}대에 배차를 전송했습니다` : '전송된 알림이 없습니다',
         body,
       );
     } catch (error) {
-      Alert.alert('배차 전송 실패', error.message);
+      notify('배차 전송 실패', error.message);
     } finally {
       setSending(false);
     }
@@ -693,7 +705,7 @@ function AdminApp() {
     try {
       await Linking.openURL(getTodayCompletionExportUrl());
     } catch (_) {
-      Alert.alert('다운로드 실패', '백엔드 연결 주소와 네트워크를 확인해 주세요.');
+      notify('다운로드 실패', '백엔드 연결 주소와 네트워크를 확인해 주세요.');
     }
   };
 

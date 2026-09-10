@@ -1,3 +1,4 @@
+import notify from '../ui/notify';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Text from '../ui/Text';
 import Icon from '../ui/Icon';
@@ -160,13 +161,13 @@ export default function DriverScreen({ onExit, bottomInset = 0 }) {
       });
       setCompleted((current) => ({ ...current, [stop.passenger_id]: record.completed_at }));
       if (record.sms_sent === false) {
-        Alert.alert(
+        notify(
           `${doneWord} (문자 미발송)`,
           `${stop.name} 어르신 기록은 저장했습니다.\n\n문자가 발송되지 않았습니다: ${record.sms_message || '사유 불명'}`,
         );
       }
     } catch (error) {
-      Alert.alert('탑승 완료 저장 실패', error.message);
+      notify('탑승 완료 저장 실패', error.message);
     } finally {
       setSaving((current) => {
         const next = { ...current };
@@ -187,7 +188,7 @@ export default function DriverScreen({ onExit, bottomInset = 0 }) {
       });
       setAckedAt(record.acknowledged_at);
     } catch (error) {
-      Alert.alert('확인 처리 실패', error.message);
+      notify('확인 처리 실패', error.message);
     } finally {
       setAcking(false);
     }
@@ -203,13 +204,13 @@ export default function DriverScreen({ onExit, bottomInset = 0 }) {
   const callContact = async (stop) => {
     const target = callTargetFor(stop);
     if (!target) {
-      Alert.alert('연락처 없음', `${stop.name} 어르신의 연락처가 등록되어 있지 않습니다.`);
+      notify('연락처 없음', `${stop.name} 어르신의 연락처가 등록되어 있지 않습니다.`);
       return;
     }
     try {
       await Linking.openURL(`tel:${target.digits}`);
     } catch (_) {
-      Alert.alert('전화 연결 실패', '이 기기에서 전화를 걸 수 없습니다.');
+      notify('전화 연결 실패', '이 기기에서 전화를 걸 수 없습니다.');
     }
   };
 

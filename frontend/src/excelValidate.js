@@ -24,6 +24,13 @@ const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ADDRESS_UNIT = /[가-힣]+(?:동|읍|면|리|로|길|가)(?=\s|\d|$|[,·])/;
 const ADDRESS_NUMBER = /\d/;
 
+// 주소가 자세한 편인가.
+//
+// 이 값으로 업로드를 '막지는' 않는다. 서버가 주소 검색에 실패하면 키워드
+// 검색으로 한 번 더 찾기 때문에 '창원시청', '용지아이파크' 같은 건물명도
+// 정상 배차된다. 여기서 막으면 서버가 처리할 수 있는 것을 못 올리게 된다.
+//
+// 대신 불러온 뒤 '이 분들은 위치가 부정확할 수 있습니다' 로 알린다.
 export function isAddressPrecise(address) {
   const text = String(address ?? '').trim();
   if (!text) return false;
@@ -41,14 +48,7 @@ export function checkRow(passenger, rowNumber) {
   const who = describe(rowNumber, passenger.name);
 
   if (!passenger.name) problems.push(`${who}의 이름이 비어 있습니다.`);
-  if (!passenger.address) {
-    problems.push(`${who}의 주소가 비어 있습니다.`);
-  } else if (!isAddressPrecise(passenger.address)) {
-    problems.push(
-      `${who}의 주소가 너무 포괄적입니다 (${passenger.address}). `
-      + '동/로/길 및 번지수까지 정확히 입력해 주세요.',
-    );
-  }
+  if (!passenger.address) problems.push(`${who}의 주소가 비어 있습니다.`);
 
   // 두 칸 모두 비워도 된다. 비우면 엔진이 수가를 지키는 선에서 정한다.
   // 한쪽만 채우거나 형식이 틀린 것은 여전히 막는다. 그건 실수지 의도가 아니다.
@@ -81,3 +81,16 @@ export function checkRow(passenger, rowNumber) {
 }
 
 
+
+
+/**
+ * 주소가 간략해 위치가 부정확할 수 있는 분들.
+ *
+ * 막지 않고 알리기만 한다. '창원시' 처럼 시 이름만 적으면 시청 좌표가
+ * 나오는데, 그건 실패로 알려주지 않는 종류의 실수라 눈에 띄게 해야 한다.
+ */
+export function vagueAddresses(passengers) {
+  return (passengers || [])
+    .filter((item) => item.address && !isAddressPrecise(item.address))
+    .map((item) => ({ name: item.name, address: item.address }));
+}

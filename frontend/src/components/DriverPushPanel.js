@@ -1,3 +1,4 @@
+import notify from '../ui/notify';
 import React, { useMemo, useState } from 'react';
 import Text from '../ui/Text';
 import Icon from '../ui/Icon';
@@ -31,12 +32,12 @@ export default function DriverPushPanel({ vehicles }) {
     try {
       await enablePushForDriver(driverName);
       setRegistered((current) => ({ ...current, [driverName]: true }));
-      Alert.alert(
+      notify(
         '알림 설정 완료',
         `${driverName} 선생님, 이 폰으로 배차 알림을 받습니다.`,
       );
     } catch (error) {
-      Alert.alert('알림 설정 실패', error.message);
+      notify('알림 설정 실패', error.message);
     } finally {
       setBusy('');
     }
