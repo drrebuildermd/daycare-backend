@@ -10,7 +10,9 @@ import { brand, color } from '../theme';
 // 이건 보안이 아니라 오조작 방지 장치다. EXPO_PUBLIC_* 값은 앱 번들에 박히므로
 // APK 를 뜯으면 볼 수 있다. 기사님이 실수로 배차 화면에 들어가 명단을 건드리는
 // 것을 막는 용도이지, 외부인의 침입을 막는 수단이 아니다.
-const ADMIN_PIN = process.env.EXPO_PUBLIC_ADMIN_PIN || '0000';
+// 빌드할 때 EXPO_PUBLIC_ADMIN_PIN 으로 박힌다.
+// 공개 웹 주소로도 열리므로 기본값을 0000 으로 두지 않는다.
+const ADMIN_PIN = process.env.EXPO_PUBLIC_ADMIN_PIN || '0524';
 
 /**
  * 앱 첫 화면. 관리자와 기사 중 무엇으로 들어갈지 고른다.
