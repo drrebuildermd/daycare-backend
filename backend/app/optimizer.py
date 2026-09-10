@@ -209,6 +209,7 @@ def resolve_window(
     stay_minutes: int,
     settings: Settings,
     deadline_minutes: int | None,
+    service_cut_minutes: int = 0,
 ) -> tuple[int, int, str, bool]:
     """이 어르신을 언제 태울 수 있는가.
 
@@ -237,8 +238,12 @@ def resolve_window(
         return parse_hhmm(declared_start), parse_hhmm(declared_end), "declared", False
 
     earliest = parse_hhmm(settings.earliest_pickup)
-    planned_minutes = round(
-        (passenger.planned_service_hours or settings.stay_hours) * 60
+    # 이용시간을 줄이면 '늦어도 몇 시까지 도착' 마지노선이 그만큼 뒤로 밀린다.
+    # 전원 배차를 위해 엔진이 마지막으로 쓰는 여유다.
+    planned_minutes = max(
+        60,
+        round((passenger.planned_service_hours or settings.stay_hours) * 60)
+        - max(0, service_cut_minutes),
     )
     # 마감이 없으면 역산할 기준이 없다. 하루 전체를 열되 이른 시각은 막는다.
     limit = deadline_minutes if deadline_minutes is not None else 24 * 60 - 1
@@ -395,6 +400,9 @@ def optimize_routes(
     resolved: list[ResolvedLocation],
     settings: Settings,
     trips_per_vehicle: int = DEFAULT_TRIPS_PER_VEHICLE,
+    # 전원 배차를 위해 엔진이 스스로 푸는 여유. 기본은 0 이다.
+    window_slack_minutes: int = 0,
+    service_cut_minutes: int = 0,
 ) -> OptimizeResponse:
     started = time.perf_counter()
     trip_type = request.trip_type
@@ -511,11 +519,26 @@ def optimize_routes(
     time_sources: dict[str, str] = {}
     impossible_windows: list[str] = []
     derived_nodes: list[tuple[int, int]] = []
+    # 완화가 넘지 못하는 바닥. 이 시각 전에는 차를 내지 않는다.
+    earliest_floor = parse_hhmm(settings.earliest_pickup)
     for node, passenger in enumerate(request.passengers, start=1):
         index = manager.NodeToIndex(node)
         low, high, source, conflict = resolve_window(
-            passenger, trip_type, stay_minutes, settings, tightest_deadline
+            passenger, trip_type, stay_minutes, settings, tightest_deadline,
+            service_cut_minutes,
         )
+        # 원장님이 적어 두신 시각이든 엔진이 정한 것이든 똑같이 넓힌다.
+        # 어느 한쪽만 넓히면 '시간을 적어 두신 분' 만 손해를 본다.
+        #
+        # 다만 앞으로 넓히는 데는 바닥이 있다. 가장 이른 픽업(기본 07:30) 은
+        # 원장님이 정하신 '이 시각 전에는 차를 안 낸다' 는 선이지 희망사항이
+        # 아니다. 이걸 안 막으면 전원 배차를 위해 어르신을 06:30 에 깨우는
+        # 답이 나온다. 태우기는 태웠으나 현장에서는 쓸 수 없는 표다.
+        # 이미 그보다 이르게 적어 두신 분은 그 시각을 바닥으로 삼는다.
+        if window_slack_minutes:
+            floor = min(low, earliest_floor)
+            low = max(floor, low - window_slack_minutes)
+            high = min(24 * 60 - 1, high + window_slack_minutes)
         if conflict:
             impossible_windows.append(passenger.name)
         passenger_windows[passenger_ids[node - 1]] = (low, high)

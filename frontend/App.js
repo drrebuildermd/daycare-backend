@@ -603,6 +603,12 @@ function AdminApp() {
       // 판이 바뀌었으니 지난 분석은 버린다.
       setAdvice(null);
       setScreen('results');
+      // 엔진이 시간을 조정해서 전원을 태웠다면 사후 보고만 한다.
+      // 전원 배차인데 붉은 경고를 띄우면 원장님이 실패한 줄 아신다.
+      const eased = response.relaxation;
+      if (eased && eased.applied && eased.headline) {
+        notify('전원 배차 완료 (시간 조정 안내)', eased.headline);
+      }
       try {
         const today = await fetchTodayCompletions();
         setCompletedStops(Object.fromEntries(

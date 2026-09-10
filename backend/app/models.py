@@ -478,6 +478,39 @@ class RecommendRequest(BaseModel):
     consider_revenue_loss: bool = True
 
 
+class TimeAdjustment(BaseModel):
+    """당초 계획보다 시각이 밀린 어르신 한 분."""
+
+    passenger_id: str
+    name: str
+    planned_window: str
+    actual_time: str
+    shift_minutes: int
+    # 늦어진 것인가. 등원이 늦어지면 그날 이용시간이 그만큼 줄어든다.
+    late: bool = False
+
+
+class RelaxationReport(BaseModel):
+    """전원을 태우기 위해 무엇을 얼마나 양보했는가.
+
+    조용히 시각을 바꿔 놓고 성공했다고만 하면, 원장님이 보호자에게 잘못된
+    시각을 통보하시게 된다. 무엇을 양보했는지 반드시 남긴다.
+    """
+
+    # 양보한 것이 있는가. False 면 원안 그대로 전원 배차된 것이다.
+    applied: bool = False
+    # 사다리를 몇 칸까지 올라갔는가
+    steps_tried: int = 1
+    window_slack_minutes: int = 0
+    transit_extra_minutes: int = 0
+    service_cut_minutes: int = 0
+    # 실제로 당초 창을 벗어난 분들. 넓힌 것과 실제로 밀린 것은 다르다.
+    adjusted: list[TimeAdjustment] = Field(default_factory=list)
+    elapsed_seconds: float = 0.0
+    # 화면에 그대로 띄울 문구
+    headline: str = ""
+
+
 class OptimizeResponse(BaseModel):
     trip_type: TripType = "inbound"
     status: str
@@ -489,6 +522,8 @@ class OptimizeResponse(BaseModel):
     notices: list[str] = Field(default_factory=list)
     # 물리적으로 태울 방법이 없어 빠진 어르신. 비어 있으면 전원 배차됐다는 뜻이다.
     unassigned_passengers: list[UnassignedPassenger] = Field(default_factory=list)
+    # 전원을 태우기 위해 엔진이 양보한 내용. 원안 그대로면 applied=False 다.
+    relaxation: RelaxationReport | None = None
     # 이 계산이 남긴 이력의 식별자. 배차를 전송할 때 이 값을 함께 보내면
     # 최종안이 어느 원안에서 나왔는지 이어진다.
     optimization_run_id: str | None = None

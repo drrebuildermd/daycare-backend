@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import Text from '../ui/Text';
 import Icon from '../ui/Icon';
-import { color } from '../theme';
+import { color, radius, tone } from '../theme';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import Accordion from './Accordion';
@@ -137,9 +137,52 @@ export default function VehicleResults({
   const capacityBlocked = unassigned.filter(
     (item) => item.reason !== 'wheelchair' && item.reason !== 'address',
   );
+  // 시간이 안 맞는다고 어르신을 길에 두지는 않는다. 엔진이 스스로 시각을
+  // 조정해서 전원을 태운 경우, 무엇을 얼마나 바꿨는지 여기서 보고한다.
+  // 조용히 바꿔 놓으면 원장님이 보호자께 잘못된 시각을 통보하시게 된다.
+  const eased = result.relaxation;
+  const easedList = (eased && eased.applied && eased.adjusted) || [];
+  // 등원이 늦어지면 그날 이용시간이 그만큼 줄어든다. 구간이 내려가면
+  // 수가도 준다. '전원 태웠다' 로만 끝내면 원장님이 이걸 모르고 지나치신다.
+  const easedLate = easedList.filter((item) => item.late);
 
   return (
     <View>
+      {/* 붉은 경고가 아니다. 전원 태웠고, 대신 시각이 밀린 분을 알리는 것이다. */}
+      {easedList.length > 0 && (
+        <View style={styles.easeCard}>
+          <View style={styles.easeHead}>
+            <Icon name="waiting" size={18} tint={tone.info.fg} />
+            <Text style={styles.easeTitle}>전원 배차 완료 · 시간 조정 안내</Text>
+          </View>
+          <Text style={styles.easeBody}>
+            원활한 동선을 위해 아래 {easedList.length}분의 시각을 당초 계획보다
+            조정했습니다. 보호자께 안내하실 때 이 시각을 알려 주세요.
+          </Text>
+          {easedList.map((item) => (
+            <View key={item.passenger_id} style={styles.easeRow}>
+              <Text style={styles.easeName}>{item.name}</Text>
+              <Text style={styles.easeTime}>
+                {item.planned_window} → {item.actual_time}
+              </Text>
+              <Text style={styles.easeShift}>{item.shift_minutes}분</Text>
+            </View>
+          ))}
+          {eased.service_cut_minutes > 0 && (
+            <Text style={styles.easeNote}>
+              이 배차는 계획 이용시간을 {eased.service_cut_minutes}분 줄여야만
+              전원을 태울 수 있었습니다. 수가 구간이 내려갈 수 있으니 확인해 주세요.
+            </Text>
+          )}
+          {eased.service_cut_minutes === 0 && easedLate.length > 0 && (
+            <Text style={styles.easeNote}>
+              늦어진 {easedLate.length}분은 센터 도착이 그만큼 밀려 그날 이용시간이
+              줄어듭니다. 수가 구간이 내려가는지 확인해 주세요.
+            </Text>
+          )}
+        </View>
+      )}
+
       {/* 물리적으로 태울 방법이 없어 빠진 분이 있으면 가장 먼저 알린다.
           결과를 그대로 전송하면 이분들은 아무 차에도 없다. */}
       {unassigned.length > 0 && (
@@ -553,6 +596,17 @@ const styles = StyleSheet.create({
   },
   applyButtonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
   dropGroup: { marginTop: 8 },
+  // 안내지 경고가 아니다. 브랜드의 info 톤을 그대로 쓴다.
+  easeCard: { backgroundColor: tone.info.bg, borderWidth: 1, borderColor: color.teal,
+    borderRadius: radius.large, padding: 16, marginBottom: 12 },
+  easeHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  easeTitle: { flex: 1, minWidth: 0, color: tone.info.fg, fontSize: 15, fontWeight: '700' },
+  easeBody: { color: color.textSecondary, fontSize: 13, lineHeight: 20, marginTop: 8 },
+  easeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  easeName: { width: 68, color: color.textPrimary, fontSize: 14, fontWeight: '600' },
+  easeTime: { flex: 1, minWidth: 0, color: color.textPrimary, fontSize: 13 },
+  easeShift: { color: tone.info.fg, fontSize: 13, fontWeight: '700' },
+  easeNote: { color: '#8A6100', fontSize: 13, lineHeight: 20, marginTop: 12 },
   dropReason: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 },
   dropReasonText: { color: '#9B2C2C', fontSize: 12, fontWeight: '800' },
   dropCard: { backgroundColor: '#FCEDED', borderWidth: 1, borderColor: '#D64545',
