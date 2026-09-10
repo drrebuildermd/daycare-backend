@@ -115,8 +115,11 @@ except HTTPException as error:
     check("가짜2 도 함께 있다 (첫 실패에서 안 멈춘다)", "가짜2" in detail)
     check("가짜3 까지 있다", "가짜3" in detail)
     check("정상인 곳은 목록에 없다", "정상 —" not in detail)
-    check("구 이름을 확인하라고 안내한다", "구 이름" in detail)
-    check("예시 줄을 지우라고 안내한다", "예시 줄" in detail)
+    check("시·구와 번지를 확인하라고 안내한다", "시·구 이름과 번지" in detail)
+    # 양식의 예시가 이제 실존 주소라 '예시 줄을 지우세요' 안내는 뺐다.
+    # 대신 카카오/네이버 DB 차이와 건물명 대안을 알려 준다.
+    check("카카오와 네이버가 다르다는 것을 알려 준다", "네이버" in detail, detail[-80:])
+    check("건물명으로 적어 보라고 안내한다", "건물 이름" in detail)
     print()
     print("   실제 문구:")
     for line in detail.split("\n"):

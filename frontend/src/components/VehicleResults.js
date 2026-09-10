@@ -131,7 +131,12 @@ export default function VehicleResults({
   // 빠진 이유가 다르면 원장님이 할 일도 다르다. 리프트가 없어서 빠진 분에게
   // '시간 범위를 넓히세요' 라고 하면 아무리 넓혀도 해결되지 않는다.
   const liftBlocked = unassigned.filter((item) => item.reason === 'wheelchair');
-  const capacityBlocked = unassigned.filter((item) => item.reason !== 'wheelchair');
+  // 주소를 못 찾은 분은 차량 문제가 아니다. 명단을 고쳐야 하는 일이라
+  // 따로 보여 준다.
+  const addressBlocked = unassigned.filter((item) => item.reason === 'address');
+  const capacityBlocked = unassigned.filter(
+    (item) => item.reason !== 'wheelchair' && item.reason !== 'address',
+  );
 
   return (
     <View>
@@ -157,6 +162,24 @@ export default function VehicleResults({
               <Text style={styles.dropHelp}>
                 차량 관리에서 휠체어 전용 좌석 수를 확인해 주세요. 리프트 차량이
                 없으면 시간 범위를 넓혀도 배차되지 않습니다.
+              </Text>
+            </View>
+          )}
+          {addressBlocked.length > 0 && (
+            <View style={styles.dropGroup}>
+              <View style={styles.dropReason}>
+                <Icon name="warning" size={15} tint="#9B2C2C" />
+                <Text style={styles.dropReasonText}>주소를 찾지 못함</Text>
+              </View>
+              {addressBlocked.map((item) => (
+                <Text key={item.passenger_id} style={styles.dropNames}>
+                  {item.name} — {item.requested_window}
+                </Text>
+              ))}
+              <Text style={styles.dropHelp}>
+                시·구 이름과 번지가 실제와 맞는지 확인해 주세요.
+                카카오 지도에 없는 번지는 네이버에 있어도 찾지 못합니다.
+                아파트나 건물 이름으로 적어 보시면 찾는 경우가 많습니다.
               </Text>
             </View>
           )}

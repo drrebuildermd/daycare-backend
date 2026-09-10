@@ -25,7 +25,11 @@ from app.database import (
     upsert_completion,
     was_dispatch_sms_sent,
 )
-from app.geocoding import resolve_locations
+from app.geocoding import (
+    address_failure_message,
+    resolve_locations,
+    resolve_locations_partial,
+)
 from app.dispatch import (
     acknowledge_dispatch,
     list_acknowledgements,
@@ -48,6 +52,7 @@ from app.models import (
     RecommendRequest,
     RecommendationReport,
     RideCompletionCreate,
+    UnassignedPassenger,
     TripType,
     RideCompletionList,
     RideCompletionRecord,
@@ -573,10 +578,60 @@ async def run_optimization(
         for location in (vehicle.as_start_location() for vehicle in request.vehicles)
         if location is not None
     ]
-    resolved = await resolve_locations(
-        [request.center, *request.passengers, *custom_starts], settings
-    )
+    # 주소를 못 찾은 분이 있어도 나머지는 배차한다. 한 분의 주소 때문에
+    # 마흔 분의 배차를 통째로 막으면 안 된다. 카카오와 네이버는 주소 DB 가
+    # 달라서, 네이버에 있는 번지가 카카오에 없는 경우가 실제로 있다.
+    locations = [request.center, *request.passengers, *custom_starts]
+    resolved, failed_indexes = await resolve_locations_partial(locations, settings)
+
+    # 센터 주소가 빠지면 배차 자체가 성립하지 않는다. 이건 막아야 한다.
+    if 0 in failed_indexes:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "센터 주소를 지도에서 찾지 못했습니다: "
+                f"{request.center.address}\n"
+                "차량 관리 화면에서 센터 주소를 다시 검색해 주세요."
+            ),
+        )
+
+    # 어르신 자리는 1..n 이다. 그 범위의 실패만 걷어낸다.
+    lost = [i - 1 for i in failed_indexes if 1 <= i <= len(request.passengers)]
+    unreachable = [request.passengers[i] for i in lost]
+    if unreachable:
+        keep = {i for i in range(len(request.passengers))} - set(lost)
+        request = request.model_copy(update={
+            "passengers": [request.passengers[i] for i in sorted(keep)],
+            "forbidden_pairs": [
+                rule for rule in request.forbidden_pairs
+                if all(pid not in {p.id for p in unreachable} for pid in rule.pair)
+            ],
+            "required_pairs": [
+                rule for rule in request.required_pairs
+                if all(pid not in {p.id for p in unreachable} for pid in rule.pair)
+            ],
+        })
+        resolved = (
+            [resolved[0]]
+            + [resolved[i + 1] for i in sorted(keep)]
+            + resolved[len(unreachable) + len(keep) + 1:]
+        )
+
     response = optimize_routes(request, resolved, settings)
+
+    # 못 찾은 분을 배차 불가 목록에 넣는다. 조용히 사라지면 안 된다.
+    for passenger in unreachable:
+        response.unassigned_passengers.append(UnassignedPassenger(
+            passenger_id=passenger.id or "",
+            name=passenger.name,
+            requested_window=passenger.address,
+            reason="address",
+            wheelchair=passenger.wheelchair,
+        ))
+    if unreachable:
+        response.notices.insert(
+            0, address_failure_message([p.name for p in unreachable])
+        )
     if absent_count:
         response.notices.append(f"{label} 미탑승 {absent_count}명은 배차에서 제외했습니다.")
     if dropped_rules:

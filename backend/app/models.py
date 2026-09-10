@@ -359,7 +359,8 @@ class UnassignedPassenger(BaseModel):
     # 왜 빠졌는지. 원장님이 무엇을 고쳐야 할지 알아야 한다.
     #   capacity  - 정원이나 시간이 안 맞음
     #   wheelchair - 휠체어 고정석이 있는 차량이 모자람
-    reason: Literal["capacity", "wheelchair"] = "capacity"
+    #   address   - 주소를 지도에서 찾지 못해 아예 넣지 못함
+    reason: Literal["capacity", "wheelchair", "address"] = "capacity"
     # 휠체어를 쓰는 분인지. 화면에서 아이콘을 붙이는 데 쓴다.
     wheelchair: bool = False
 

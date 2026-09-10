@@ -4,12 +4,16 @@
   "창원시 의창구 중앙대로 151"  -> 0건 (실제로는 성산구다)
   "창원시 성산구 중앙대로 151"  -> 1건
 
-그래서 두 가지를 한다.
+카카오와 네이버는 주소 DB 가 다르다. 네이버에 있는 번지가 카카오에 없는
+경우가 실제로 있다. 그래서 세 가지를 한다.
+
   1) 주소 검색으로 못 찾으면 키워드 검색으로 한 번 더 찾는다.
      어르신 주소를 '○○아파트' 처럼 건물명으로 적어 두시는 경우가 많은데,
      주소 검색은 그걸 못 찾고 키워드 검색은 찾는다.
   2) 첫 번째 실패에서 멈추지 않고 끝까지 훑어 못 찾은 것을 모아 알린다.
      34명 명단에서 한 분씩 고쳐 가며 34번 다시 계산하게 하면 안 된다.
+  3) 배차에서는 못 찾은 분만 빼고 나머지를 배차한다.
+     한 분의 주소 때문에 마흔 분의 배차를 통째로 막으면 안 된다.
 """
 from dataclasses import dataclass
 
@@ -67,9 +71,28 @@ async def _lookup(client: httpx.AsyncClient, address: str, headers: dict):
     return None
 
 
-async def resolve_locations(
+def address_failure_message(names: list[str]) -> str:
+    """못 찾은 주소를 원장님께 알리는 문구."""
+    shown = names[:5]
+    lines = "\n".join(f"· {name}" for name in shown)
+    rest = len(names) - len(shown)
+    more = f"\n... 그 밖에 {rest}명" if rest > 0 else ""
+    return (
+        f"주소 {len(names)}건을 지도에서 찾지 못했습니다.\n{lines}{more}\n\n"
+        "시·구 이름과 번지가 실제와 맞는지 확인해 주세요. "
+        "카카오 지도에 없는 번지는 네이버에 있어도 찾지 못합니다.\n"
+        "아파트나 건물 이름으로 적어 보시면 찾는 경우가 많습니다."
+    )
+
+
+async def resolve_locations_partial(
     locations: list[LocationInput], settings: Settings
-) -> list[ResolvedLocation]:
+) -> tuple[list[ResolvedLocation], list[int]]:
+    """찾은 것과 못 찾은 자리를 함께 돌려준다.
+
+    못 찾은 자리에도 항목을 넣는다(좌표 0). 자리를 비우면 노드 번호가
+    어긋나기 때문이다. 부르는 쪽이 그 자리를 걷어낸다.
+    """
     unresolved = [item for item in locations if item.latitude is None]
     if unresolved and not settings.kakao_rest_api_key:
         names = ", ".join(item.name for item in unresolved[:3])
@@ -84,10 +107,10 @@ async def resolve_locations(
 
     headers = {"Authorization": f"KakaoAK {settings.kakao_rest_api_key}"}
     resolved: list[ResolvedLocation] = []
-    failed: list[tuple[str, str]] = []
+    failed_indexes: list[int] = []
 
     async with httpx.AsyncClient(timeout=8.0) as client:
-        for item in locations:
+        for position, item in enumerate(locations):
             if item.latitude is not None and item.longitude is not None:
                 resolved.append(ResolvedLocation(
                     name=item.name, address=item.address,
@@ -98,11 +121,7 @@ async def resolve_locations(
             address = _clean(item.address)
             point = await _lookup(client, address, headers)
             if point is None:
-                # 여기서 멈추지 않는다. 못 찾은 것을 모아 한 번에 알려야
-                # 원장님이 엑셀을 한 번만 고치신다.
-                failed.append((item.name, address))
-                # 자리를 유지해야 노드 번호가 어긋나지 않는다. 어차피 아래에서
-                # 예외를 던지므로 이 값은 쓰이지 않는다.
+                failed_indexes.append(position)
                 resolved.append(ResolvedLocation(
                     name=item.name, address=address, latitude=0.0, longitude=0.0,
                 ))
@@ -114,18 +133,20 @@ async def resolve_locations(
                 latitude=latitude, longitude=longitude,
             ))
 
-    if failed:
-        shown = failed[:5]
-        lines = "\n".join(f"· {name} — {address}" for name, address in shown)
-        rest = len(failed) - len(shown)
-        more = f"\n... 그 밖에 {rest}건이 더 있습니다." if rest > 0 else ""
+    return resolved, failed_indexes
+
+
+async def resolve_locations(
+    locations: list[LocationInput], settings: Settings
+) -> list[ResolvedLocation]:
+    """하나라도 못 찾으면 거절한다.
+
+    센터 주소처럼 빠지면 배차 자체가 성립하지 않는 곳에 쓴다.
+    """
+    resolved, failed_indexes = await resolve_locations_partial(locations, settings)
+    if failed_indexes:
         raise HTTPException(
             status_code=422,
-            detail=(
-                f"주소 {len(failed)}건을 지도에서 찾지 못했습니다.\n{lines}{more}\n\n"
-                "시·구 이름이 실제와 맞는지 확인해 주세요. "
-                "구 이름이 하나만 달라도 찾지 못합니다.\n"
-                "양식에 들어 있는 예시 줄(김마중·박온케어)을 지우지 않으셨다면 그것도 지워 주세요."
-            ),
+            detail=address_failure_message([locations[i].name for i in failed_indexes]),
         )
     return resolved
