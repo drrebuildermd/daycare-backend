@@ -137,9 +137,9 @@ const DISPATCH_GOALS = [
   },
   {
     key: 'comfort',
-    title: '어른신 편의 최우선',
+    title: '어르신 편의 최우선',
     keeps: '차에 오래 계시지 않도록 탑승 시간을 끝까지 지킵니다',
-    gives: '대신 픽업 시각을 옷기거나 이용시간을 줄입니다',
+    gives: '대신 픽업 시각을 옮기거나 이용시간을 줄입니다',
   },
   {
     key: 'promise',
@@ -950,7 +950,12 @@ function AdminApp() {
                       style={[styles.goalCard, picked && styles.goalCardOn]}
                       onPress={() => setDispatchPriority(goal.key)}
                       accessibilityRole="radio"
-                      accessibilityState={{ selected: picked }}
+                      // 폰(네이티브) 은 accessibilityState 로, 웹은 aria-checked 로 읽는다.
+                      // react-native-web 0.21 은 accessibilityState 를 DOM 에 안 내보내서
+                      // 이걸 빼면 웹 화면 낭독기가 무엇이 골라졌는지 못 읽는다.
+                      accessibilityState={{ checked: picked }}
+                      aria-checked={picked}
+                      accessibilityLabel={`${goal.title}. ${goal.keeps}. ${goal.gives}`}
                     >
                       <View style={[styles.goalDot, picked && styles.goalDotOn]}>
                         {picked && <View style={styles.goalDotCore} />}
