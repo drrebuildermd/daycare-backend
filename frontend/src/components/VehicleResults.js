@@ -148,17 +148,39 @@ export default function VehicleResults({
 
   return (
     <View>
-      {/* 붉은 경고가 아니다. 전원 태웠고, 대신 시각이 밀린 분을 알리는 것이다. */}
-      {easedList.length > 0 && (
+      {/* 붉은 경고가 아니다. 전원 태웠고, 무엇을 양보했는지 알리는 것이다.
+          시각이 밀린 분이 없어도(탑승·이용시간만 내준 경우) 보고해야 한다. */}
+      {eased && eased.applied && !!eased.headline && (
         <View style={styles.easeCard}>
           <View style={styles.easeHead}>
             <Icon name="waiting" size={18} tint={tone.info.fg} />
-            <Text style={styles.easeTitle}>전원 배차 완료 · 시간 조정 안내</Text>
+            <Text style={styles.easeTitle}>전원 배차 완료 · 조정 안내</Text>
           </View>
-          <Text style={styles.easeBody}>
-            원활한 동선을 위해 아래 {easedList.length}분의 시각을 당초 계획보다
-            조정했습니다. 보호자께 안내하실 때 이 시각을 알려 주세요.
-          </Text>
+          {/* 엔진이 어떤 철학으로 타협했는지. 원장님이 그 판단에 동의할지
+              정하시려면 '무엇을 지키고 무엇을 내줬는지' 를 아셔야 한다. */}
+          {!!eased.priority_label && (
+            <View style={styles.easeGoal}>
+              <Text style={styles.easeGoalLabel}>배차 최우선 목표</Text>
+              <Text style={styles.easeGoalName}>{eased.priority_label}</Text>
+              <Text
+                style={[
+                  styles.easeGoalKept,
+                  eased.protected_conceded && styles.easeGoalBroken,
+                ]}
+              >
+                {eased.protected_conceded
+                  ? `${eased.protected_label} 지키지 못함`
+                  : `${eased.protected_label} 지킴`}
+              </Text>
+            </View>
+          )}
+          <Text style={styles.easeBody}>{eased.headline}</Text>
+          {easedList.length > 0 && (
+            <Text style={styles.easeBody}>
+              아래 {easedList.length}분은 당초 계획보다 시각이 밀렸습니다.
+              보호자께 안내하실 때 이 시각을 알려 주세요.
+            </Text>
+          )}
           {easedList.map((item) => (
             <View key={item.passenger_id} style={styles.easeRow}>
               <Text style={styles.easeName}>{item.name}</Text>
@@ -607,6 +629,15 @@ const styles = StyleSheet.create({
   easeTime: { flex: 1, minWidth: 0, color: color.textPrimary, fontSize: 13 },
   easeShift: { color: tone.info.fg, fontSize: 13, fontWeight: '700' },
   easeNote: { color: '#8A6100', fontSize: 13, lineHeight: 20, marginTop: 12 },
+  // 어떤 철학으로 타협했는지. 지켜 냈으면 초록, 못 지켰으면 주황으로 읽힌다.
+  easeGoal: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8,
+    marginTop: 10 },
+  easeGoalLabel: { color: color.textSecondary, fontSize: 12 },
+  easeGoalName: { color: tone.info.fg, fontSize: 13, fontWeight: '700' },
+  easeGoalKept: { color: '#237B4B', fontSize: 12, fontWeight: '700',
+    backgroundColor: '#E9F7EF', paddingHorizontal: 8, paddingVertical: 2,
+    borderRadius: 999 },
+  easeGoalBroken: { color: '#8A6100', backgroundColor: '#FEF6E7' },
   dropReason: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 },
   dropReasonText: { color: '#9B2C2C', fontSize: 12, fontWeight: '800' },
   dropCard: { backgroundColor: '#FCEDED', borderWidth: 1, borderColor: '#D64545',

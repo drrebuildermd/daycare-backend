@@ -532,18 +532,12 @@ def map_page(settings: Settings = Depends(get_settings)) -> HTMLResponse:
 
 
 def _relaxation_headline(relaxation) -> str:
-    """원장님께 그대로 보여 줄 한 문단."""
-    if not relaxation.applied or not relaxation.adjusted:
-        return ""
-    names = [item.name for item in relaxation.adjusted]
-    shown = ", ".join(names[:5])
-    more = f" 외 {len(names) - 5}분" if len(names) > 5 else ""
-    biggest = max(item.shift_minutes for item in relaxation.adjusted)
-    return (
-        "전원 배차를 완료했습니다. 단, 원활한 동선을 위해 부득이하게 "
-        f"[{shown}{more}] 어르신의 시간을 당초 계획보다 "
-        f"최대 {biggest}분가량 유동적으로 조정하여 최적화했습니다."
-    )
+    """원장님께 그대로 보여 줄 한 문단.
+
+    어떤 철학으로 무엇을 지키고 무엇을 내줬는지는 사다리를 쌓은 쪽이 안다.
+    그래서 문구는 엔진이 만들고 여기서는 꺼내 쓰기만 한다.
+    """
+    return relaxation.headline
 
 
 @app.post("/api/optimize", response_model=OptimizeResponse)
@@ -645,6 +639,10 @@ async def run_optimization(
         transit_extra_minutes=relaxation.transit_extra_minutes,
         service_cut_minutes=relaxation.service_cut_minutes,
         elapsed_seconds=relaxation.elapsed_seconds,
+        priority=relaxation.priority,
+        priority_label=relaxation.priority_label,
+        protected_label=relaxation.protected_label,
+        protected_conceded=relaxation.protected_conceded,
         adjusted=[
             TimeAdjustment(
                 passenger_id=item.passenger_id,

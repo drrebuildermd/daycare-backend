@@ -124,6 +124,30 @@ const FAB_HEIGHT = 58;
 const FAB_GAP = 16;
 
 const STORAGE_KEY = 'daycare-routing:last-session:v1';
+
+// 전원 배차를 위해 무언가를 양보해야 할 때, 센터가 마지막까지 지키는 것.
+// 센터마다 지키려는 것이 다르다. 엔진이 정해 버리면 한 센터의 철학을
+// 전국 센터에 강요하는 셔이 된다.
+const DISPATCH_GOALS = [
+  {
+    key: 'revenue',
+    title: '수익 · 이용시간 최우선',
+    keeps: '계획 이용시간(수가)을 끝까지 지킵니다',
+    gives: '대신 픽업 시각과 탑승 시간을 먼저 조정합니다',
+  },
+  {
+    key: 'comfort',
+    title: '어른신 편의 최우선',
+    keeps: '차에 오래 계시지 않도록 탑승 시간을 끝까지 지킵니다',
+    gives: '대신 픽업 시각을 옷기거나 이용시간을 줄입니다',
+  },
+  {
+    key: 'promise',
+    title: '보호자 약속 최우선',
+    keeps: '보호자께 통보한 픽업 시각을 끝까지 지킵니다',
+    gives: '대신 탑승 시간을 늘리거나 이용시간을 줄입니다',
+  },
+];
 // 기사님 폰은 한 번 고르면 계속 기사 화면으로 열려야 한다.
 const MODE_KEY = 'daycare-routing:mode:v1';
 
@@ -173,6 +197,8 @@ function AdminApp() {
   // 시각을 비운 어르신을 엔진이 어디까지 자유롭게 배치할 수 있는지 정하는 울타리.
   const [earliestPickup, setEarliestPickup] = useState('07:30');
   const [maxTransitMinutes, setMaxTransitMinutes] = useState('80');
+  // 기본값은 지금까지의 동작과 같다. 고르지 않아도 배차는 그대로 된다.
+  const [dispatchPriority, setDispatchPriority] = useState('revenue');
   const [pairRules, setPairRules] = useState([]);
   const [sending, setSending] = useState(false);
   const [focusVehicleId, setFocusVehicleId] = useState(null);
@@ -196,6 +222,7 @@ function AdminApp() {
           if (session.outboundDeadline) setOutboundDeadline(session.outboundDeadline);
           if (session.earliestPickup) setEarliestPickup(session.earliestPickup);
           if (session.maxTransitMinutes) setMaxTransitMinutes(session.maxTransitMinutes);
+          if (session.dispatchPriority) setDispatchPriority(session.dispatchPriority);
           if (session.passengers) setPassengers(session.passengers);
           if (session.pairRules) setPairRules(session.pairRules);
           // v1 은 배차 결과를 result 하나로 들고 있었다. 그때는 등원뿐이었다.
@@ -483,6 +510,7 @@ function AdminApp() {
       outbound_deadline: (outboundDeadline || '').trim() || null,
       earliest_pickup: (earliestPickup || '').trim() || null,
       max_transit_minutes: Number(maxTransitMinutes) || null,
+      dispatch_priority: dispatchPriority || null,
       vehicles: vehicles.map((vehicle) => ({
         id: vehicle.id,
         vehicle_type: vehicle.vehicleType.trim(),
@@ -622,6 +650,7 @@ function AdminApp() {
           outboundDeadline,
           earliestPickup,
           maxTransitMinutes,
+          dispatchPriority,
           passengers,
           pairRules,
           result: response,
@@ -908,6 +937,39 @@ function AdminApp() {
                   {'\n'}짧게 잡을수록 어르신이 차에 계시는 시간은 줄지만,
                   외곽에 사시는 분이 배차에서 빠질 수 있습니다.
                 </Text>
+
+                {/* 시간이 빡빡하면 엔진이 스스로 조건을 풀어 전원을 태운다.
+                    그때 무엇부터 내주고 무엇을 끝까지 지킬지는 센터가 정한다.
+                    이걸 엔진이 정해 버리면 한 센터의 철학을 전국에 강요하게 된다. */}
+                <Text style={styles.inputLabel}>배차 최우선 목표</Text>
+                {DISPATCH_GOALS.map((goal) => {
+                  const picked = dispatchPriority === goal.key;
+                  return (
+                    <Pressable
+                      key={goal.key}
+                      style={[styles.goalCard, picked && styles.goalCardOn]}
+                      onPress={() => setDispatchPriority(goal.key)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: picked }}
+                    >
+                      <View style={[styles.goalDot, picked && styles.goalDotOn]}>
+                        {picked && <View style={styles.goalDotCore} />}
+                      </View>
+                      <View style={styles.goalBody}>
+                        <Text style={[styles.goalTitle, picked && styles.goalTitleOn]}>
+                          {goal.title}
+                        </Text>
+                        <Text style={styles.goalKeeps}>{goal.keeps}</Text>
+                        <Text style={styles.goalGives}>{goal.gives}</Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+                <Text style={styles.deadlineHint}>
+                  전원을 태우려면 무언가를 양보해야 할 때가 있습니다.
+                  {'\n'}여기서 고른 것은 다른 방법이 모두 바닥난 뒤에야 건드립니다.
+                  {'\n'}무엇을 양보했는지는 계산 후 안내로 알려 드립니다.
+                </Text>
               </View>
               <AddressSearch
                 visible={isCenterAddressModalOpen}
@@ -1170,6 +1232,23 @@ const styles = StyleSheet.create({
   excelGhostText: { color: '#07705F', fontWeight: '800', fontSize: 13 },
   excelSolidText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
   deadlineHint: { color: '#7C8D87', fontSize: 12, lineHeight: 18, marginTop: 6 },
+  // 배차 최우선 목표. 셋 중 하나만 고르는 것이라 라디오처럼 보이게 한다.
+  // 각 항목이 '무엇을 지키고 무엇을 내주는지' 를 함께 읽어야 고를 수 있어서
+  // 접히는 드롭다운 대신 펼쳐 둔다.
+  goalCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    backgroundColor: color.white, borderWidth: 1, borderColor: color.border,
+    borderRadius: 12, padding: 12, marginTop: 8 },
+  goalCardOn: { borderColor: color.teal, backgroundColor: '#E6F7F4' },
+  goalDot: { width: 18, height: 18, borderRadius: 9, borderWidth: 2,
+    borderColor: '#C3CDC9', alignItems: 'center', justifyContent: 'center',
+    marginTop: 2 },
+  goalDotOn: { borderColor: color.teal },
+  goalDotCore: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.teal },
+  goalBody: { flex: 1, minWidth: 0 },
+  goalTitle: { color: color.textPrimary, fontSize: 14, fontWeight: '700' },
+  goalTitleOn: { color: '#07705F' },
+  goalKeeps: { color: color.textPrimary, fontSize: 12, lineHeight: 18, marginTop: 4 },
+  goalGives: { color: '#7C8D87', fontSize: 12, lineHeight: 18, marginTop: 2 },
   excelHint: { color: '#7C8D87', fontSize: 12, lineHeight: 18, marginBottom: 10 },
   fileName: { color: '#0BA38E', fontSize: 11, marginTop: -7, marginBottom: 12 },
   addButton: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#98A2B3', borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginBottom: 14 },

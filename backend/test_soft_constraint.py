@@ -76,11 +76,12 @@ def solve(request):
 
 
 # ---------------------------------------------------------------------------
-print("=== 1. 사다리 자체가 올바른 순서인가 ===")
-print("   싼 것부터 양보해야 한다. 이용시간 단축은 수가 손실이라 맨 뒤다.")
+print("=== 1. 기본 사다리(수익 최우선)가 올바른 순서인가 ===")
+print("   센터가 아무것도 고르지 않으면 이용시간 단축을 맨 뒤에 둔다.")
+print("   세 철학 전체 검증은 test_priority.py 가 맡는다.")
 
 check("첫 칸은 원안이다 (아무것도 양보하지 않는다)", LADDER[0].is_original, LADDER[0].describe())
-check("여섯 칸이다", len(LADDER) == 6, len(LADDER))
+check("일곱 칸이다", len(LADDER) == 7, len(LADDER))
 
 slacks = [s.window_slack for s in LADDER]
 cuts = [s.service_cut for s in LADDER]
@@ -98,7 +99,6 @@ for step in LADDER[first_cut:]:
           step.window_slack == 60, step.window_slack)
 
 
-print()
 print("=== 2. 원안으로 되면 아무것도 건드리지 않는다 (가장 중요) ===")
 print("   멀쩡히 돌아가던 배차가 v4.2 때문에 달라지면 안 된다.")
 

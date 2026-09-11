@@ -403,6 +403,7 @@ def optimize_routes(
     # 전원 배차를 위해 엔진이 스스로 푸는 여유. 기본은 0 이다.
     window_slack_minutes: int = 0,
     service_cut_minutes: int = 0,
+    transit_extra_minutes: int = 0,
 ) -> OptimizeResponse:
     started = time.perf_counter()
     trip_type = request.trip_type
@@ -472,6 +473,13 @@ def optimize_routes(
         overrides["max_transit_minutes"] = request.max_transit_minutes
     if overrides:
         settings = settings.model_copy(update=overrides)
+    # 전원 배차를 위한 탑승 시간 연장은 화면 값을 덮어쓴 '뒤' 에 더한다.
+    # 앞에서 더하면 원장님이 값을 적어 두신 센터에서는 연장이 통째로
+    # 사라져, 완화 사다리의 그 칸이 아무 일도 하지 않게 된다.
+    if transit_extra_minutes:
+        settings = settings.model_copy(update={
+            "max_transit_minutes": settings.max_transit_minutes + transit_extra_minutes
+        })
 
     rounds = tuple(range(1, trips_per_vehicle + 1))
     trip_specs = [(vehicle, round_number) for vehicle in vehicles for round_number in rounds]

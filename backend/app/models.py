@@ -216,6 +216,13 @@ class PairRule(BaseModel):
         return (self.passenger_ids[0], self.passenger_ids[1])
 
 
+# 완화 사다리에서 센터가 '마지막까지 지킬 것'.
+#   revenue  이용 시간(수가) 을 지킨다
+#   comfort  탑승 시간(어르신 피로도) 을 지킨다
+#   promise  픽업 시각(보호자와의 약속) 을 지킨다
+DispatchPriority = Literal["revenue", "comfort", "promise"]
+
+
 class OptimizeRequest(BaseModel):
     # 이 배차가 등원인지 하원인지. 구형 앱은 보내지 않으므로 등원으로 본다.
     trip_type: TripType = "inbound"
@@ -229,6 +236,9 @@ class OptimizeRequest(BaseModel):
     earliest_pickup: str | None = None
     # 한 회차가 걸리는 전체 시간의 상한(분).
     max_transit_minutes: int | None = Field(default=None, ge=20, le=300)
+    # 전원 배차를 위해 양보해야 할 때 무엇을 마지막까지 지킬 것인가.
+    # 구형 앱은 보내지 않으므로 비워 두면 서버 기본값(수익 최우선)을 쓴다.
+    dispatch_priority: DispatchPriority | None = None
     # 같은 차·같은 회차에 함께 태우면 안 되는 조합 (기피)
     forbidden_pairs: list[PairRule] = Field(default_factory=list)
     # 반드시 같은 차·같은 회차에 함께 태워야 하는 조합 (짝꿍)
@@ -507,6 +517,13 @@ class RelaxationReport(BaseModel):
     # 실제로 당초 창을 벗어난 분들. 넓힌 것과 실제로 밀린 것은 다르다.
     adjusted: list[TimeAdjustment] = Field(default_factory=list)
     elapsed_seconds: float = 0.0
+    # 어떤 철학으로 타협했는가. 원장님이 그 판단에 동의할지 정하실 근거다.
+    priority: DispatchPriority = "revenue"
+    priority_label: str = ""
+    # 마지막까지 지키려던 것 ('탑승 시간' 처럼 사람이 읽는 이름)
+    protected_label: str = ""
+    # 끝내 그것까지 손댔는가. 지켰다고 거짓말하지 않기 위한 값이다.
+    protected_conceded: bool = False
     # 화면에 그대로 띄울 문구
     headline: str = ""
 
