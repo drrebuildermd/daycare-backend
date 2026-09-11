@@ -500,6 +500,24 @@ class TimeAdjustment(BaseModel):
     late: bool = False
 
 
+class ServiceCutLoss(BaseModel):
+    """계획 이용시간을 줄여서 수가 구간이 내려간 어르신 한 분.
+
+    등원이 늦어진 것과는 관계없다. 등원이 밀리면 하원 배차가 실제
+    도착 시각에 맞춰 픽업을 뒤로 미루므로 체류 시간은 보장된다.
+    여기 오르는 분은 엔진이 계획 자체를 줄인 경우뿐이다.
+    """
+
+    passenger_id: str
+    name: str
+    care_grade: str
+    planned_hours: float
+    actual_hours: float
+    planned_band: str
+    actual_band: str
+    lost_won: int
+
+
 class RelaxationReport(BaseModel):
     """전원을 태우기 위해 무엇을 얼마나 양보했는가.
 
@@ -524,6 +542,12 @@ class RelaxationReport(BaseModel):
     protected_label: str = ""
     # 끝내 그것까지 손댔는가. 지켰다고 거짓말하지 않기 위한 값이다.
     protected_conceded: bool = False
+    # 계획 이용시간을 줄여서 수가 구간이 실제로 내려간 분들.
+    # 비어 있으면 수가는 그대로라는 뜻이다. 등원 지연은 여기 안 들어온다.
+    service_cut_losses: list[ServiceCutLoss] = Field(default_factory=list)
+    service_cut_loss_won: int = 0
+    # 수가표에 없어 금액을 못 난 경우. 0원으로 둔갑하지 않는다.
+    service_cut_unknown: list[str] = Field(default_factory=list)
     # 화면에 그대로 띄울 문구
     headline: str = ""
 

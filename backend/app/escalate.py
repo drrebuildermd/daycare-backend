@@ -27,6 +27,7 @@ import time
 from dataclasses import dataclass, field
 
 from .config import Settings
+from .finance import RevenueLossItem, revenue_loss
 from .geocoding import ResolvedLocation
 from .models import OptimizeRequest, OptimizeResponse, format_hhmm, parse_hhmm
 from .optimizer import optimize_routes, resolve_window
@@ -172,6 +173,12 @@ class Relaxation:
     protected: str = SERVICE
     # 끝내 그것까지 손댔는가. 지켰다고 거짓말하지 않기 위한 값이다.
     protected_conceded: bool = False
+    # 계획 이용시간을 줄여서 수가 구간이 실제로 내려간 분들.
+    # 등원이 늦은 것과는 관계없다. 그건 하원에서 보전된다.
+    service_cut_losses: list[RevenueLossItem] = field(default_factory=list)
+    service_cut_loss_won: int = 0
+    # 수가표에 없어 금액을 못 난 경우. 0원으로 둔갑하지 않는다.
+    service_cut_unknown: list[str] = field(default_factory=list)
 
     @property
     def priority_label(self) -> str:
@@ -230,11 +237,50 @@ class Relaxation:
             if self.protected_conceded
             else LEVER_KEPT[self.protected]
         )
-        return (
+        line = (
             "전원 배차를 완료했습니다. "
             f"센터가 선택한 [{self.priority_label}] 목표에 따라, {stance} "
             f"부득이하게 {body}"
         )
+        # 수가가 정말로 내려간 때만 그 사실을 덧붙인다.
+        # 등원 지연은 하원에서 보전되므로 여기에 끌어들이지 않는다.
+        if self.service_cut_losses:
+            names = ", ".join(item.name for item in self.service_cut_losses[:5])
+            extra = (f" 외 {len(self.service_cut_losses) - 5}분"
+                     if len(self.service_cut_losses) > 5 else "")
+            shift = self.service_cut_losses[0]
+            line += (
+                f" 이로 인해 [{names}{extra}] 어르신의 수가 구간이 "
+                f"{shift.planned_band}에서 {shift.actual_band}으로 내려갑니다"
+                f"(하루 약 {self.service_cut_loss_won:,}원)."
+            )
+        return line
+
+
+def _service_cut_losses(
+    request: OptimizeRequest, settings: Settings, cut_minutes: int
+) -> tuple[int, list[RevenueLossItem], list[str]]:
+    """계획 이용시간을 줄인 것이 정말로 수가를 깎았는가.
+
+    중요한 구분이 하나 있다. 등원이 좀 늦는 것과 계획 자체를 줄이는 것은
+    다르다. 등원이 10분 밀려도 하원 배차가 실제 도착 시각에 맞춰 픽업을
+    뒤로 미루므로 체류 시간은 그대로 보장된다. 그건 수가와 상관없다.
+    여기서 보는 것은 엔진이 최후수단으로 '8시간을 7시간으로' 계획 자체를
+    줄인 경우뿐이다.
+
+    그리고 줄였다고 다 깎이는 것도 아니다. 10시간을 9시간으로 줄여도
+    8~10 구간 안이면 한 푸도 안 깎인다. 구간이 실제로 내려간 분만 골라낸다.
+    """
+    if cut_minutes <= 0:
+        return 0, [], []
+    shortfalls: dict[str, float] = {}
+    for passenger in request.passengers:
+        planned = round((passenger.planned_service_hours or settings.stay_hours) * 60)
+        # optimizer 의 바닥과 똑같아야 한다. 어긋나면 없는 손실을 보고하게 된다.
+        after = max(60, planned - cut_minutes)
+        if after < planned:
+            shortfalls[passenger.id or ""] = (planned - after) / 60
+    return revenue_loss(shortfalls, request.passengers, settings)
 
 
 def _original_windows(
@@ -286,6 +332,7 @@ def _measure(result: OptimizeResponse, original: dict[str, tuple[int, int]]) -> 
 def _report(
     step: Step, attempt: int, priority: str, order: tuple[str, str, str],
     adjusted: list[Adjustment], started: float,
+    losses: tuple[int, list[RevenueLossItem], list[str]] = (0, [], []),
 ) -> Relaxation:
     protected = order[-1]
     conceded = step.value_of(protected) > 0
@@ -305,6 +352,9 @@ def _report(
         priority=priority,
         protected=protected,
         protected_conceded=conceded,
+        service_cut_loss_won=losses[0],
+        service_cut_losses=losses[1],
+        service_cut_unknown=losses[2],
     )
 
 
@@ -375,6 +425,7 @@ def solve_until_everyone_rides(
                 step, attempt, chosen, order,
                 _measure(result, original) if not step.is_original else [],
                 started,
+                _service_cut_losses(request, settings, step.service_cut),
             )
 
     # 여기까지 왔다면 끝까지 못 태운 분이 있다. 가장 많이 태운 것을 준다.
@@ -382,4 +433,5 @@ def solve_until_everyone_rides(
         best_step, len(ladder), chosen, order,
         _measure(best, original) if best and not best_step.is_original else [],
         started,
+        _service_cut_losses(request, settings, best_step.service_cut),
     )

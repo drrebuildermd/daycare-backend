@@ -142,9 +142,13 @@ export default function VehicleResults({
   // 조용히 바꿔 놓으면 원장님이 보호자께 잘못된 시각을 통보하시게 된다.
   const eased = result.relaxation;
   const easedList = (eased && eased.applied && eased.adjusted) || [];
-  // 등원이 늦어지면 그날 이용시간이 그만큼 줄어든다. 구간이 내려가면
-  // 수가도 준다. '전원 태웠다' 로만 끝내면 원장님이 이걸 모르고 지나치신다.
-  const easedLate = easedList.filter((item) => item.late);
+  // 수가가 깎이는 것은 '등원이 늦어졌을 때' 가 아니라 '계획 이용시간 자체를
+  // 줄였을 때' 뿐이다. 등원이 밀리면 하원 배차가 실제 도착 시각에 맞춰
+  // 픽업을 뒤로 미뤄 체류 시간을 보장하므로 그날 수가는 그대로다.
+  // 게다가 줄였다고 다 깎이지도 않는다. 10시간을 9시간으로 줄여도 8~10
+  // 구간 안이면 한 푼도 안 깎인다. 서버가 구간이 실제로 내려간 분만 준다.
+  const cutLosses = (eased && eased.service_cut_losses) || [];
+  const cutUnknown = (eased && eased.service_cut_unknown) || [];
 
   return (
     <View>
@@ -190,18 +194,40 @@ export default function VehicleResults({
               <Text style={styles.easeShift}>{item.shift_minutes}분</Text>
             </View>
           ))}
-          {eased.service_cut_minutes > 0 && (
-            <Text style={styles.easeNote}>
-              이 배차는 계획 이용시간을 {eased.service_cut_minutes}분 줄여야만
-              전원을 태울 수 있었습니다. 수가 구간이 내려갈 수 있으니 확인해 주세요.
-            </Text>
+          {/* 수가가 실제로 깎이는 경우에만 알린다. 등원이 밀린 것만으로는
+              알리지 않는다. 그건 하원 배차가 체류 시간을 맞춰 주기 때문에
+              수가와 무관하고, 괜한 경고로 원장님을 불안하게 만들 뿐이다. */}
+          {cutLosses.length > 0 && (
+            <View style={styles.cutBox}>
+              <Text style={styles.cutTitle}>
+                수가 구간이 내려가는 어르신 {cutLosses.length}분
+              </Text>
+              <Text style={styles.cutWhy}>
+                전원을 태우려면 계획 이용시간을 {eased.service_cut_minutes}분
+                줄이는 수밖에 없었습니다.
+              </Text>
+              {cutLosses.map((item) => (
+                <View key={item.passenger_id} style={styles.cutRow}>
+                  <Text style={styles.cutName}>{item.name}</Text>
+                  <Text style={styles.cutBand}>
+                    {item.planned_band} → {item.actual_band}
+                  </Text>
+                  <Text style={styles.cutWon}>
+                    -{item.lost_won.toLocaleString('ko-KR')}원
+                  </Text>
+                </View>
+              ))}
+              {cutLosses.length > 1 && (
+                <Text style={styles.cutTotal}>
+                  하루 합계 약 {eased.service_cut_loss_won.toLocaleString('ko-KR')}원
+                </Text>
+              )}
+            </View>
           )}
-          {eased.service_cut_minutes === 0 && easedLate.length > 0 && (
-            <Text style={styles.easeNote}>
-              늦어진 {easedLate.length}분은 센터 도착이 그만큼 밀려 그날 이용시간이
-              줄어듭니다. 수가 구간이 내려가는지 확인해 주세요.
-            </Text>
-          )}
+          {/* 표에 없는 등급·구간은 0원으로 둔갑시키지 않는다. */}
+          {cutUnknown.map((line) => (
+            <Text key={line} style={styles.easeNote}>{line}</Text>
+          ))}
         </View>
       )}
 
@@ -629,6 +655,17 @@ const styles = StyleSheet.create({
   easeTime: { flex: 1, minWidth: 0, color: color.textPrimary, fontSize: 13 },
   easeShift: { color: tone.info.fg, fontSize: 13, fontWeight: '700' },
   easeNote: { color: '#8A6100', fontSize: 13, lineHeight: 20, marginTop: 12 },
+  // 수가가 실제로 깎인 경우에만 뜨는 상자. 여기만 경고 톤을 쓴다.
+  cutBox: { backgroundColor: '#FEF6E7', borderWidth: 1, borderColor: '#F2B84B',
+    borderRadius: 12, padding: 12, marginTop: 12 },
+  cutTitle: { color: '#8A6100', fontSize: 14, fontWeight: '700' },
+  cutWhy: { color: '#8A6100', fontSize: 12, lineHeight: 18, marginTop: 4 },
+  cutRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  cutName: { width: 68, color: color.textPrimary, fontSize: 14, fontWeight: '600' },
+  cutBand: { flex: 1, minWidth: 0, color: color.textPrimary, fontSize: 13 },
+  cutWon: { color: '#9B2C2C', fontSize: 13, fontWeight: '700' },
+  cutTotal: { color: '#8A6100', fontSize: 13, fontWeight: '700', marginTop: 10,
+    textAlign: 'right' },
   // 어떤 철학으로 타협했는지. 지켜 냈으면 초록, 못 지켰으면 주황으로 읽힌다.
   easeGoal: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8,
     marginTop: 10 },

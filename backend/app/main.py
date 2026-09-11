@@ -52,6 +52,7 @@ from app.models import (
     RecommendRequest,
     RecommendationReport,
     RelaxationReport,
+    ServiceCutLoss,
     RideCompletionCreate,
     TimeAdjustment,
     UnassignedPassenger,
@@ -643,6 +644,21 @@ async def run_optimization(
         priority_label=relaxation.priority_label,
         protected_label=relaxation.protected_label,
         protected_conceded=relaxation.protected_conceded,
+        service_cut_loss_won=relaxation.service_cut_loss_won,
+        service_cut_unknown=relaxation.service_cut_unknown,
+        service_cut_losses=[
+            ServiceCutLoss(
+                passenger_id=item.passenger_id,
+                name=item.name,
+                care_grade=item.care_grade,
+                planned_hours=item.planned_hours,
+                actual_hours=item.actual_hours,
+                planned_band=item.planned_band,
+                actual_band=item.actual_band,
+                lost_won=item.lost_won,
+            )
+            for item in relaxation.service_cut_losses
+        ],
         adjusted=[
             TimeAdjustment(
                 passenger_id=item.passenger_id,
